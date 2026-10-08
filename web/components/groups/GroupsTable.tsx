@@ -88,22 +88,22 @@ export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; d
 
   const toggleSort = (key: "name" | "created_at") => setSort((s) => (s.key === key ? { key, dir: (s.dir * -1) as 1 | -1 } : { key, dir: key === "name" ? 1 : -1 }));
   const allOn = rows.length > 0 && rows.every((r) => picked.has(r.id));
-  const th = "whitespace-nowrap px-4 py-4 text-xs font-medium uppercase tracking-wide text-slate-500";
+  const th = "whitespace-nowrap px-5 py-4 text-sm font-semibold uppercase tracking-wide text-slate-700";
   const visible = COLS.filter((c) => cols[c.key]);
   const cell = (g: WaGroup, k: ColKey): React.ReactNode => {
     switch (k) {
       case "origin":
         return g.origin === "created"
-          ? <span className="inline-flex items-center rounded-md bg-slate-100 px-2.5 py-1 text-sm font-medium">✦ <span className="ml-1">Funnelchat</span></span>
-          : <span className="inline-flex items-center rounded-md bg-green-50 px-2.5 py-1 text-sm font-medium text-green-700">⇪ <span className="ml-1">WhatsApp</span></span>;
+          ? <span className="inline-flex items-center rounded-md bg-slate-100 px-2.5 py-1 text-base font-medium">✦ <span className="ml-1">Funnelchat</span></span>
+          : <span className="inline-flex items-center rounded-md bg-green-50 px-2.5 py-1 text-base font-medium text-green-700">⇪ <span className="ml-1">WhatsApp</span></span>;
       case "clicks": return <span className="font-medium"><Icon>↖</Icon>{g.clicks}</span>;
       case "admins": return <Admins n={g.admins} />;
       case "participants": return <span className="font-medium"><Icon>👥</Icon>{g.participants}</span>;
       case "scheduled_messages": return <span className="font-medium"><Icon>💬</Icon>{g.scheduled_messages}</span>;
       case "type":
         return g.type === "community"
-          ? <span className="inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white">👥 <span className="ml-2">Comunidad</span></span>
-          : <span className="inline-flex items-center rounded-full bg-slate-100 px-4 py-2 text-sm font-medium">👥 <span className="ml-2">{TYPES[g.type]}</span></span>;
+          ? <span className="inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-base font-medium text-white">👥 <span className="ml-2">Comunidad</span></span>
+          : <span className="inline-flex items-center rounded-full bg-slate-100 px-4 py-2 text-base font-medium">👥 <span className="ml-2">{TYPES[g.type]}</span></span>;
       case "capacity":
         return (
           <button type="button" role="switch" aria-checked={g.auto_capacity} aria-label={`Capacidad de ${g.name}`} disabled={!isAdmin}
@@ -122,20 +122,20 @@ export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; d
     <div>
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Grupos, Comunidades y Canales</h1>
-          <p className="text-sm text-slate-500">{groups.length} registros en total</p>
+          <h1 className="text-3xl font-bold text-slate-900">Grupos, Comunidades y Canales</h1>
+          <p className="text-base text-slate-600">{groups.length} registros en total</p>
         </div>
         {isAdmin && (
-          <button onClick={() => setImportOpen(true)} className="shrink-0 rounded-full bg-slate-900 px-5 py-3 text-sm font-medium text-white hover:bg-slate-700">⇪ Importar</button>
+          <button onClick={() => setImportOpen(true)} className="shrink-0 rounded-full bg-slate-900 px-6 py-3 text-base font-medium text-white hover:bg-slate-700">⇪ Importar</button>
         )}
       </div>
 
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <input type="search" aria-label="Buscar por nombre" placeholder="Buscar por nombre..." value={q} onChange={(e) => setQ(e.target.value)}
-          className="w-full max-w-sm rounded-full border bg-white px-5 py-3 text-sm" />
+          className="w-full max-w-md rounded-full border border-slate-300 bg-white px-5 py-3 text-base text-slate-900" />
         <div className="relative flex gap-3" ref={box}>
-          <button onClick={() => setMenu(menu === "cols" ? null : "cols")} className="rounded-full border bg-white px-5 py-3 text-sm shadow-sm">▥ Columnas</button>
-          <button onClick={() => setMenu(menu === "filter" ? null : "filter")} className="rounded-full border bg-white px-5 py-3 text-sm shadow-sm">⏷ Filtrar</button>
+          <button onClick={() => setMenu(menu === "cols" ? null : "cols")} className="rounded-full border border-slate-300 bg-white px-5 py-3 text-base text-slate-900 shadow-sm">▥ Columnas</button>
+          <button onClick={() => setMenu(menu === "filter" ? null : "filter")} className="rounded-full border border-slate-300 bg-white px-5 py-3 text-base text-slate-900 shadow-sm">⏷ Filtrar</button>
           {menu === "cols" && (
             <ul className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl border bg-white py-2 shadow-lg">
               {COLS.map((c) => (
@@ -168,9 +168,9 @@ export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; d
           <button onClick={() => remove([...picked])} className="rounded-full border px-4 py-1.5 text-red-600 hover:bg-red-50">Eliminar</button>
         </div>
       )}
-      <div className="overflow-x-auto rounded-2xl border bg-white">
-        <table className="w-full min-w-[1300px] text-left text-sm">
-          <thead className="bg-slate-50">
+      <div className="scroll-x max-h-[calc(100vh-17rem)] rounded-2xl border border-slate-300 bg-white">
+        <table className="w-full min-w-[1500px] text-left text-base text-slate-900">
+          <thead className="sticky top-0 z-10 bg-slate-100">
             <tr>
               <th className="w-12 px-4 py-4">
                 <input type="checkbox" aria-label="Seleccionar todos" checked={allOn}
@@ -189,7 +189,7 @@ export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; d
           </thead>
           <tbody>
             {rows.length === 0 && (
-              <tr><td colSpan={visible.length + 3} className="px-4 py-16 text-center text-slate-500">
+              <tr><td colSpan={visible.length + 3} className="px-5 py-16 text-center text-base text-slate-600">
                 {groups.length === 0 ? "Aún no hay grupos, comunidades ni canales." : "Ningún registro coincide con los filtros."}
               </td></tr>
             )}
@@ -199,21 +199,21 @@ export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; d
                   <input type="checkbox" aria-label={`Seleccionar ${g.name}`} checked={picked.has(g.id)}
                     onChange={() => setPicked((p) => { const n = new Set(p); n.has(g.id) ? n.delete(g.id) : n.add(g.id); return n; })} />
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-5 py-4">
                   <div className="flex items-center gap-3">
-                    <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-slate-100 text-slate-400">
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-slate-100 text-slate-400">
                       {g.avatar_url
                         // eslint-disable-next-line @next/next/no-img-element
                         ? <img src={g.avatar_url} alt="" className="h-full w-full object-cover" />
                         : "👥"}
                     </span>
                     <span className="min-w-0">
-                      <span className="block max-w-[240px] truncate font-semibold" title={g.name}>{g.name}</span>
-                      {g.invite_link && <a href={g.invite_link} target="_blank" rel="noreferrer" className="block max-w-[240px] truncate text-xs text-slate-500 hover:underline">{g.invite_link}</a>}
+                      <span className="block max-w-[300px] truncate text-base font-semibold text-slate-900" title={g.name}>{g.name}</span>
+                      {g.invite_link && <a href={g.invite_link} target="_blank" rel="noreferrer" className="block max-w-[300px] truncate text-sm text-slate-600 hover:underline">{g.invite_link}</a>}
                     </span>
                   </div>
                 </td>
-                {visible.map((c) => <td key={c.key} className="whitespace-nowrap px-4 py-3 text-slate-600">{cell(g, c.key)}</td>)}
+                {visible.map((c) => <td key={c.key} className="whitespace-nowrap px-5 py-4 text-slate-800">{cell(g, c.key)}</td>)}
                 <td className="relative px-4 py-3 text-right" data-rowmenu>
                   <button aria-label={`Acciones de ${g.name}`} aria-haspopup="menu" aria-expanded={rowMenu === g.id}
                     onClick={() => setRowMenu(rowMenu === g.id ? null : g.id)} className="px-2 text-lg leading-none text-slate-500 hover:text-slate-900">···</button>

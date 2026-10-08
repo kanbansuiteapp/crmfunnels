@@ -16,3 +16,10 @@
   --series-5: #e87ba4;
   --series-other: #9a9994;
 }
+
+/* barra de desplazamiento horizontal siempre visible (tablas anchas) */
+.scroll-x { overflow-x: scroll; scrollbar-width: thin; scrollbar-color: #94a3b8 #e2e8f0; }
+.scroll-x::-webkit-scrollbar { height: 12px; width: 12px; }
+.scroll-x::-webkit-scrollbar-track { background: #e2e8f0; border-radius: 6px; }
+.scroll-x::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 6px; border: 2px solid #e2e8f0; }
+.scroll-x::-webkit-scrollbar-thumb:hover { background: #64748b; }

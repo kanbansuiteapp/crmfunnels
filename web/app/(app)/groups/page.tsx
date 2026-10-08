@@ -15,7 +15,7 @@ export default async function GroupsPage() {
   if (!me) redirect("/");
 
   return (
-    <main className="mx-auto max-w-7xl p-6">
+    <main className="p-4 md:p-5">
       <GroupsTable groups={(groups ?? []) as WaGroup[]} devices={(channels ?? []).map((c) => ({ id: c.id, name: c.name, phone: c.phone_number ?? "", status: c.status }))} isAdmin={me.role === "admin"} />
     </main>
   );
