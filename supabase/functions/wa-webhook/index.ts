@@ -47,6 +47,15 @@ Deno.serve(async (req) => {
   });
   if (error) return json({ error: error.message }, 500);
 
+  // whalink: el mensaje trae "(ref:código)" -> cuenta como lead del enlace
+  const text = content ?? "";
+  const ref = /\(ref:([a-f0-9]{6})\)/i.exec(text);
+  if (ref) await admin.rpc("whalink_attribute", { p_conversation: conversationId, p_code: ref[1] });
+  // baja: quien escribe STOP no recibirá envíos masivos
+  if (/^\s*(stop|baja|cancelar|no molestar)\s*$/i.test(text)) {
+    await admin.rpc("mark_do_not_contact", { p_conversation: conversationId });
+  }
+
   // dispara las automatizaciones sin bloquear la respuesta al proveedor
   const bg = Promise.allSettled([tick(admin, 10), aiRespond(admin, conversationId as string)]);
   // @ts-ignore EdgeRuntime existe en el runtime de Supabase

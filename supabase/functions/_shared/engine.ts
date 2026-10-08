@@ -249,3 +249,59 @@ async function httpRequest(cfg: Record<string, any>, contact: any, run: any): Pr
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return `HTTP ${r.status}`;
 }
+
+// ───────────── envío masivo ─────────────
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Envía como máximo `per_minute` mensajes por campaña activa, espaciados con algo de azar
+// para no disparar los filtros anti-spam de WhatsApp. Se llama una vez por minuto.
+export async function runBroadcasts(db: Db): Promise<void> {
+  const { data: bcs } = await db.from("broadcasts")
+    .select("id, organization_id, channel_id, message, per_minute").eq("status", "sending");
+
+  for (const b of bcs ?? []) {
+    const { data: recipients } = await db.rpc("claim_broadcast_recipients", { p_broadcast: b.id, p_limit: b.per_minute });
+    const { data: channel } = await db.from("channels").select("api_url, api_key, instance_name").eq("id", b.channel_id).single();
+    const gap = 60_000 / b.per_minute;
+
+    for (const [i, r] of (recipients ?? []).entries()) {
+      if (i > 0) await sleep(Math.round(gap * (0.7 + Math.random() * 0.6)));
+      // si la cancelaron mientras tanto, se detiene
+      const { data: now } = await db.from("broadcasts").select("status").eq("id", b.id).single();
+      if (now?.status !== "sending") {
+        await db.from("broadcast_recipients").update({ status: "pending", locked_at: null }).eq("id", r.id);
+        continue;
+      }
+      try {
+        const { data: contact } = await db.from("contacts")
+          .select("id, name, phone_number, organization_id, do_not_contact").eq("id", r.contact_id).single();
+        if (!contact || contact.do_not_contact) {
+          await db.rpc("broadcast_mark", { p_recipient: r.id, p_status: "skipped", p_error: "no contactar" });
+          continue;
+        }
+        const text = render(b.message, contact).trim();
+        await sendText(channel!, contact.phone_number, text);
+
+        let { data: conv } = await db.from("conversations").select("id")
+          .eq("channel_id", b.channel_id).eq("contact_id", contact.id).maybeSingle();
+        if (!conv) {
+          const { data: created } = await db.from("conversations")
+            .insert({ organization_id: contact.organization_id, channel_id: b.channel_id, contact_id: contact.id })
+            .select("id").single();
+          conv = created;
+        }
+        if (conv) {
+          await db.from("messages").insert({
+            organization_id: contact.organization_id, conversation_id: conv.id, contact_id: contact.id,
+            direction: "out", content: text, status: "sent",
+          });
+        }
+        await db.rpc("broadcast_mark", { p_recipient: r.id, p_status: "sent" });
+      } catch (e) {
+        await db.rpc("broadcast_mark", {
+          p_recipient: r.id, p_status: "failed", p_error: String(e instanceof Error ? e.message : e),
+        });
+      }
+    }
+  }
+}

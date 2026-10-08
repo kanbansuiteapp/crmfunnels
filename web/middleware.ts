@@ -24,7 +24,9 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user && !request.nextUrl.pathname.startsWith("/login")) {
+  const path = request.nextUrl.pathname;
+  // /login y los enlaces públicos de Whalink (/w/…) no exigen sesión
+  if (!user && !path.startsWith("/login") && !path.startsWith("/w/")) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
