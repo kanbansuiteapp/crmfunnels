@@ -2,7 +2,7 @@ export type Conversation = {
   id: string;
   assignee_id: string | null;
   last_message_at: string;
-  contact: { name: string | null; phone_number: string } | null;
+  contact: { id: string; name: string | null; phone_number: string } | null;
 };
 
 export type Message = {
@@ -13,3 +13,5 @@ export type Message = {
   status: string;
   timestamp: string;
 };
+
+export type Member = { id: string; name: string };

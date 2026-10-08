@@ -3,14 +3,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { ChannelForm } from "./ChannelForm";
-import type { Conversation, Message } from "./types";
+import { ContactPanel } from "./ContactPanel";
+import type { Conversation, Member, Message } from "./types";
 
 export function Inbox({
   initialConversations,
   hasChannels,
+  isAdmin,
+  team,
 }: {
   initialConversations: Conversation[];
   hasChannels: boolean;
+  isAdmin: boolean;
+  team: Member[];
 }) {
   const supabase = useMemo(() => createClient(), []);
   const [conversations, setConversations] = useState(initialConversations);
@@ -24,7 +29,7 @@ export function Inbox({
   async function loadConversations() {
     const { data } = await supabase
       .from("conversations")
-      .select("id, assignee_id, last_message_at, contact:contacts(name, phone_number)")
+      .select("id, assignee_id, last_message_at, contact:contacts(id, name, phone_number)")
       .order("last_message_at", { ascending: false });
     if (data) setConversations(data as unknown as Conversation[]);
   }
@@ -67,6 +72,18 @@ export function Inbox({
     bottom.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const current = conversations.find((c) => c.id === selected) ?? null;
+
+  async function reassign(assigneeId: string) {
+    if (!selected) return;
+    const { error } = await supabase
+      .from("conversations")
+      .update({ assignee_id: assigneeId || null })
+      .eq("id", selected);
+    if (error) setErr(error.message);
+    loadConversations();
+  }
+
   async function send(e: React.FormEvent) {
     e.preventDefault();
     if (!selected || !text.trim()) return;
@@ -105,6 +122,22 @@ export function Inbox({
       </aside>
 
       <section className="flex min-w-0 flex-1 flex-col rounded-xl border bg-white">
+        {current && isAdmin && (
+          <div className="flex items-center gap-2 border-b px-4 py-2 text-sm">
+            <label htmlFor="assignee" className="text-slate-600">Asignado a</label>
+            <select
+              id="assignee"
+              value={current.assignee_id ?? ""}
+              onChange={(e) => reassign(e.target.value)}
+              className="rounded border px-2 py-1"
+            >
+              <option value="">Sin asignar</option>
+              {team.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="flex-1 space-y-2 overflow-y-auto p-4">
           {messages.map((m) => (
             <div key={m.id} className={`flex ${m.direction === "out" ? "justify-end" : ""}`}>
@@ -134,6 +167,7 @@ export function Inbox({
           </button>
         </form>
       </section>
+      {current?.contact && <ContactPanel key={current.contact.id} contactId={current.contact.id} />}
     </div>
   );
 }
