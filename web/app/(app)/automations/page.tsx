@@ -1,30 +1,26 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { AutomationsClient } from "@/components/automations/AutomationsClient";
-import type { Automation, Run } from "@/components/automations/types";
+import { AutomationsList } from "@/components/automations/AutomationsList";
+import { WebhookCard } from "@/components/automations/WebhookCard";
+import type { AutomationRow, Folder } from "@/components/automations/types";
 
 export default async function AutomationsPage() {
   const supabase = createClient();
   const { data: auth } = await supabase.auth.getUser();
-  const [{ data: automations }, { data: runs }, { data: team }] = await Promise.all([
+  const [{ data: me }, { data: items }, { data: folders }] = await Promise.all([
+    supabase.from("profiles").select("role").eq("id", auth.user?.id ?? "").maybeSingle(),
     supabase.from("automations")
-      .select("id, name, trigger_type, conditions, actions_tree_json, enabled").order("created_at"),
-    supabase.from("automation_runs")
-      .select("id, status, created_at, automation:automations(name)")
-      .order("created_at", { ascending: false }).limit(20),
-    supabase.from("profiles").select("id, role"),
+      .select("id, name, trigger_type, conditions, enabled, created_at, folder_id, runs:automation_runs(count)")
+      .order("created_at", { ascending: false }),
+    supabase.from("automation_folders").select("id, name").order("name"),
   ]);
-  const me = team?.find((m) => m.id === auth.user?.id);
   if (!me) redirect("/");
+  const isAdmin = me.role === "admin";
 
   return (
-    <main className="mx-auto max-w-5xl p-4">
-      <h1 className="mb-4 text-xl font-semibold">Automatizaciones</h1>
-      <AutomationsClient
-        automations={(automations ?? []) as unknown as Automation[]}
-        runs={(runs ?? []) as unknown as Run[]}
-        isAdmin={me.role === "admin"}
-      />
+    <main className="mx-auto max-w-6xl space-y-10 p-6">
+      <AutomationsList items={(items ?? []) as unknown as AutomationRow[]} folders={(folders ?? []) as Folder[]} isAdmin={isAdmin} />
+      {isAdmin && <WebhookCard />}
     </main>
   );
 }

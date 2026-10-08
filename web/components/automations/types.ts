@@ -14,6 +14,7 @@ export type Automation = {
   conditions: Record<string, string | number>;
   actions_tree_json: { steps: Step[] };
   enabled: boolean;
+  folder_id: string | null;
 };
 
 export type Run = {
@@ -37,4 +38,16 @@ export const STEP_LABELS: Record<Step["type"], string> = {
   http_request: "Petición HTTP",
   wait: "Esperar",
   condition: "Condición",
+};
+
+export type Folder = { id: string; name: string };
+
+export type AutomationRow = {
+  id: string; name: string; trigger_type: Trigger; conditions: Record<string, string | number>;
+  enabled: boolean; created_at: string; folder_id: string | null; runs: { count: number }[];
+};
+
+export type RunWithLog = {
+  id: string; status: string; created_at: string;
+  log: { step?: string; ok?: boolean; detail?: string; error?: string; result?: boolean; minutes?: number }[];
 };
