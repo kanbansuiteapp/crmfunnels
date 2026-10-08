@@ -15,12 +15,10 @@ export default async function WhalinksPage() {
   if (!me) redirect("/");
 
   return (
-    <main className="mx-auto max-w-6xl p-6">
-      <WhalinksClient
+    <WhalinksClient
         links={(links ?? []) as unknown as Whalink[]}
         channels={(channels ?? []).filter((c) => c.phone_number).map((c) => ({ id: c.id, name: c.name, phone: c.phone_number as string }))}
         isAdmin={me.role === "admin"}
-      />
-    </main>
+    />
   );
 }
