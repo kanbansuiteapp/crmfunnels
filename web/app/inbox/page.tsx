@@ -27,6 +27,7 @@ export default async function InboxPage() {
           </Link>
         )}
         <Link href="/team" className="text-sm text-sky-700 underline">Equipo</Link>
+        <Link href="/automations" className="text-sm text-sky-700 underline">Automatizaciones</Link>
       </nav>
       <Inbox
         initialConversations={(conversations ?? []) as unknown as Conversation[]}
