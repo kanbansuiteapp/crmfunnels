@@ -18,7 +18,7 @@ export type ExistingGroup = { id: string; name: string; type: Kind; participants
 
 export const DEFAULT_CFG: Cfg = {
   type: "group", name: "", description: "", image_path: "", auto_create: true, who_can_send: "admins",
-  admin_channel_ids: [], backup_admins: [], moderation: false, moderation_mode: "all", moderation_criteria: ["insults", "negative", "spam", "links", "promo"],
+  admin_channel_ids: [], backup_admins: [], moderation: false, moderation_mode: "ai", moderation_criteria: ["insults", "negative", "spam", "links", "promo"],
   max_participants: 1000, max_clicks: 1000, strategy: "balanced", remember_visitor: true, reserve_groups: 0,
   numbering_position: "end", numbering_start: 1, custom_path: "", tag_in: "", tag_out: "", tracking_code: "", silent_protection: false,
 };
@@ -358,25 +358,38 @@ export function CampaignForm({
 
           <section className={`${card} flex items-center justify-between gap-4`}>
             <div className="flex items-center gap-4">
-              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-xl" aria-hidden>🛡️</span>
-              <h2 className="text-lg font-semibold text-slate-900">Moderación de comentarios</h2>
+              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-xl text-slate-600" aria-hidden>💬</span>
+              <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+                Moderación de comentarios
+                <span title="Controla qué comentarios se mantienen en los canales de la campaña" className="flex h-5 w-5 cursor-help items-center justify-center rounded-full border border-slate-400 text-xs font-normal text-slate-500">i</span>
+              </h2>
             </div>
             <Switch on={c.moderation} label="Moderación de comentarios" onChange={(v) => set("moderation", v)} />
           </section>
           {c.moderation && (
-            <div className="space-y-3">
-              <Radio on={c.moderation_mode === "all"} title="Eliminar todo" text="Borra automáticamente cualquier comentario que se publique en los canales" onClick={() => set("moderation_mode", "all")} />
-              <Radio on={c.moderation_mode === "ai"} title="Analizar con IA" text="Analiza el contenido y elimina solo los comentarios que coincidan con los criterios seleccionados" onClick={() => set("moderation_mode", "ai")} />
+            <div className="space-y-3" role="radiogroup" aria-label="Modo de moderación">
+              {([
+                ["all", "🗑", "Eliminar todo", "Borra automáticamente cualquier comentario que se publique en los canales", "bg-red-50 text-red-500"],
+                ["ai", "🤖", "Analizar con IA", "Analiza el contenido y elimina solo los comentarios que coincidan con los criterios seleccionados", "bg-slate-100 text-slate-600"],
+              ] as const).map(([v, icon, title, text, tone]) => (
+                <button key={v} type="button" role="radio" aria-checked={c.moderation_mode === v} onClick={() => set("moderation_mode", v)}
+                  className={`flex w-full items-center gap-4 rounded-2xl border p-5 text-left ${c.moderation_mode === v ? "border-slate-300 bg-slate-100" : "border-slate-300 bg-white hover:bg-slate-50"}`}>
+                  <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-lg ${tone}`} aria-hidden>{icon}</span>
+                  <span><span className="block text-lg font-semibold text-slate-900">{title}</span><span className="text-base text-slate-600">{text}</span></span>
+                </button>
+              ))}
               {c.moderation_mode === "ai" && (
-                <div className="grid gap-3 md:grid-cols-2">
+                <div className="grid gap-3 pt-1 md:grid-cols-2">
                   {CRITERIA.map((k) => {
                     const on = c.moderation_criteria.includes(k.v);
                     return (
                       <button key={k.v} type="button" role="checkbox" aria-checked={on}
                         onClick={() => set("moderation_criteria", on ? c.moderation_criteria.filter((x) => x !== k.v) : [...c.moderation_criteria, k.v])}
-                        className="flex items-start gap-3 rounded-xl border border-slate-300 bg-white p-4 text-left hover:bg-slate-50">
-                        <span className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 text-[10px] ${on ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300"}`}>{on && "✓"}</span>
-                        <span><span className="block text-base font-semibold text-slate-900">{k.title}</span><span className="text-sm text-slate-600">{k.sub}</span></span>
+                        className="flex items-start gap-3 rounded-2xl border border-slate-300 bg-white p-5 text-left hover:bg-slate-50">
+                        <span className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${on ? "border-slate-900" : "border-slate-300"}`}>
+                          {on && <span className="h-2.5 w-2.5 rounded-full bg-slate-900" />}
+                        </span>
+                        <span><span className="block text-lg font-semibold text-slate-900">{k.title}</span><span className="text-sm text-slate-600">{k.sub}</span></span>
                       </button>
                     );
                   })}
