@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
   try {
     if (action === "list") {
       const { data: orgs, error } = await admin.from("organizations")
-        .select("id, name, plan_name, max_agents, max_devices, max_contacts, active, created_at").order("created_at", { ascending: false });
+        .select("id, name, plan_name, max_agents, max_devices, max_contacts, contact_limit_hits, active, created_at").order("created_at", { ascending: false });
       if (error) return json({ error: error.message }, 500);
       const out = await Promise.all((orgs ?? []).map(async (o: any) => {
         const count = async (table: string, extra?: (q: any) => any) => {
@@ -100,6 +100,7 @@ Deno.serve(async (req) => {
         if (v === undefined) return json({ error: "Los límites deben ser números enteros (o vacío = sin límite)" }, 400);
         patch[k] = v;
       }
+      if (patch.max_contacts !== undefined) patch.contact_limit_hits = 0; // al cambiar el límite se reinicia el aviso
       if (body.active !== undefined) patch.active = body.active === true;
       if (Object.keys(patch).length === 0) return json({ error: "Nada que cambiar" }, 400);
       const { error } = await admin.from("organizations").update(patch).eq("id", id);

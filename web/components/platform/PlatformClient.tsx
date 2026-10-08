@@ -8,7 +8,7 @@ import { Alert, btnOutline, btnPrimary, Field, fmtDate, inputCls, Modal, ModalAc
 
 type Company = {
   id: string; name: string; plan_name: string; active: boolean; created_at: string;
-  max_agents: number | null; max_devices: number | null; max_contacts: number | null;
+  max_agents: number | null; max_devices: number | null; max_contacts: number | null; contact_limit_hits: number;
   agents: number; devices: number; contacts: number; owner_name: string; owner_email: string;
 };
 const nf = new Intl.NumberFormat("es-PE");
@@ -180,7 +180,7 @@ export function PlatformClient() {
                   <td className="px-3 py-3 text-slate-600">{c.plan_name}</td>
                   <td className={`px-3 py-3 ${over(c.agents, c.max_agents) ? "font-semibold text-amber-600" : "text-slate-600"}`}>{usage(c.agents, c.max_agents)}</td>
                   <td className={`px-3 py-3 ${over(c.devices, c.max_devices) ? "font-semibold text-amber-600" : "text-slate-600"}`}>{usage(c.devices, c.max_devices)}</td>
-                  <td className={`px-3 py-3 ${over(c.contacts, c.max_contacts) ? "font-semibold text-amber-600" : "text-slate-600"}`}>{usage(c.contacts, c.max_contacts)}</td>
+                  <td className={`px-3 py-3 ${over(c.contacts, c.max_contacts) ? "font-semibold text-amber-600" : "text-slate-600"}`}>{usage(c.contacts, c.max_contacts)}{c.contact_limit_hits > 0 && <span className="block text-xs font-normal text-red-600">{nf.format(c.contact_limit_hits)} rechazados</span>}</td>
                   <td className="px-3 py-3"><span className={`rounded px-2 py-0.5 text-xs font-medium ${c.active ? "bg-green-50 text-green-700" : "bg-red-50 text-red-600"}`}>{c.active ? "Activa" : "Suspendida"}</span></td>
                   <td className="whitespace-nowrap px-3 py-3 text-slate-500">{fmtDate(c.created_at)}</td>
                   <td className="px-3 py-3">
@@ -195,7 +195,7 @@ export function PlatformClient() {
             </tbody>
           </table>
         </div>
-        <p className="mt-3 text-xs text-slate-500">Los contactos son un límite informativo: se muestran, pero hoy no bloquean mensajes entrantes. Vendedores y dispositivos sí se bloquean al llegar al límite.</p>
+        <p className="mt-3 text-xs text-slate-500">Al llegar al límite, la empresa deja de registrar contactos nuevos (los que ya existen siguen funcionando) y verás cuántos se rechazaron. Lo mismo ocurre con vendedores y dispositivos. Si subes el límite, el contador de rechazados se reinicia.</p>
       </main>
 
       {modal?.t === "new" && <CompanyModal company={null} onClose={() => setModal(null)} onSaved={(m) => { setModal(null); setNote(m); load(); }} />}

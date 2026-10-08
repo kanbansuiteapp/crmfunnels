@@ -81,6 +81,7 @@ Deno.serve(async (req) => {
     p_media_url: null,
   });
   if (error) return json({ error: error.message }, 500);
+  if (!conversationId) return json({ ok: true, ignored: "contact-limit-or-suspended" }); // empresa suspendida o sin cupo de contactos
 
   // whalink: el mensaje trae "(ref:código)" -> cuenta como lead del enlace
   const text = content ?? "";

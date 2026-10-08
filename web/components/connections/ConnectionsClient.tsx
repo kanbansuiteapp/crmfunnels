@@ -7,7 +7,7 @@ import { Alert, btnOutline, btnPrimary, Field, inputCls, Modal, ModalActions, No
 
 type Channel = { id: string; name: string; phone_number: string | null; provider: string; status: string; wa_type: "messenger" | "business"; groups: number };
 type Overview = {
-  plan_name: string; contacts: number; agents: number; devices: number;
+  plan_name: string; contact_limit_hits: number; contacts: number; agents: number; devices: number;
   max_contacts: number | null; max_agents: number | null; max_devices: number | null; channels: Channel[];
 };
 const nf = new Intl.NumberFormat("es-PE");
@@ -199,6 +199,12 @@ export function ConnectionsClient() {
           <Stat icon="phone" label="Dispositivos" value={ov?.devices ?? 0} max={ov?.max_devices ?? null} />
         </div>
       </div>
+      {ov && ov.max_contacts != null && ov.contacts >= ov.max_contacts && (
+        <p role="alert" className="mt-6 rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Alcanzaste el límite de {nf.format(ov.max_contacts)} contactos de tu plan.
+          {ov.contact_limit_hits > 0 ? ` ${nf.format(ov.contact_limit_hits)} contacto(s) nuevo(s) no se registraron.` : ""} Comunícate con tu proveedor para ampliarlo.
+        </p>
+      )}
       <hr className="my-8 border-slate-100" />
 
       <div className="flex items-center justify-between">

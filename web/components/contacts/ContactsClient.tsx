@@ -20,6 +20,13 @@ export function ContactsClient() {
   const [tagIds, setTagIds] = useState<string[]>([]);
   const [sel, setSel] = useState<string[]>([]);
   const [page, setPage] = useState(0);
+  const [plan, setPlan] = useState<{ max: number | null; hits: number } | null>(null);
+
+  useEffect(() => {
+    createClient().rpc("connections_overview").then(({ data }) => {
+      if (data) setPlan({ max: (data.max_contacts as number | null) ?? null, hits: (data.contact_limit_hits as number) ?? 0 });
+    });
+  }, []);
 
   useEffect(() => {
     createClient()
@@ -75,8 +82,13 @@ export function ContactsClient() {
           </FilterButton>
         } />
       <Alert text={err} />
+      {plan?.max != null && total >= plan.max && (
+        <p role="alert" className="mt-4 rounded-md bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          Alcanzaste el límite de {plan.max.toLocaleString("es-PE")} contactos de tu plan.{plan.hits > 0 ? ` ${plan.hits.toLocaleString("es-PE")} contacto(s) nuevo(s) no se registraron.` : ""} Comunícate con tu proveedor para ampliarlo.
+        </p>
+      )}
       <p className="mt-6 text-base font-semibold text-slate-900">
-        Total de contactos {total.toLocaleString("es-PE")}{filtered && rows !== null ? ` · ${sorted.length.toLocaleString("es-PE")} coinciden` : ""}
+        Total de contactos {total.toLocaleString("es-PE")}{plan?.max != null ? ` / ${plan.max.toLocaleString("es-PE")}` : ""}{filtered && rows !== null ? ` · ${sorted.length.toLocaleString("es-PE")} coinciden` : ""}
       </p>
       <div className="scroll-x">
         <table className={TABLE}>
