@@ -1,14 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { usePathname } from "next/navigation";
 
-type Props = { pipelineId: string | null; name: string; role: string };
+type Props = { pipelineId: string | null };
 
-export function Sidebar({ pipelineId, name, role }: Props) {
+export function Sidebar({ pipelineId }: Props) {
   const pathname = usePathname();
-  const router = useRouter();
 
   const items = [
     { href: "/dashboard", label: "Dashboard", icon: "📊" },
@@ -19,12 +17,6 @@ export function Sidebar({ pipelineId, name, role }: Props) {
     { href: "/team", label: "Equipo", icon: "👥" },
   ];
   const active = (href: string) => pathname === href || pathname.startsWith(href + "/");
-
-  async function logout() {
-    await createClient().auth.signOut();
-    router.push("/login");
-    router.refresh();
-  }
 
   return (
     <>
@@ -46,11 +38,6 @@ export function Sidebar({ pipelineId, name, role }: Props) {
             </Link>
           ))}
         </nav>
-        <div className="border-t px-4 py-3 text-sm">
-          <p className="truncate font-medium">{name}</p>
-          <p className="mb-2 text-xs text-slate-500">{role === "admin" ? "Administrador" : "Agente"}</p>
-          <button onClick={logout} className="text-xs text-slate-600 underline">Cerrar sesión</button>
-        </div>
       </aside>
 
       {/* móvil: barra superior con desplazamiento horizontal */}
@@ -66,7 +53,6 @@ export function Sidebar({ pipelineId, name, role }: Props) {
             {i.icon} {i.label}
           </Link>
         ))}
-        <button onClick={logout} className="ml-auto whitespace-nowrap px-3 text-xs text-slate-500">Salir</button>
       </nav>
     </>
   );
