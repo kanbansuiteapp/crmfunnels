@@ -24,7 +24,8 @@ Deno.serve(async (req) => {
     .from("profiles").select("organization_id, role").eq("id", u.user.id).maybeSingle();
   if (!me || me.role !== "admin") return json({ error: "Solo administradores" }, 403);
 
-  const { email, password, name } = await req.json().catch(() => ({}));
+  const { email, password, name, show_name, chat_visibility } = await req.json().catch(() => ({}));
+  const vis = ["assigned", "unassigned", "all"].includes(chat_visibility) ? chat_visibility : "assigned";
   if (!/^\S+@\S+\.\S+$/.test(String(email ?? ""))) return json({ error: "Correo inválido" }, 400);
   if (String(password ?? "").length < 8) return json({ error: "La contraseña necesita 8+ caracteres" }, 400);
 
@@ -39,6 +40,8 @@ Deno.serve(async (req) => {
     name: String(name ?? "").trim() || String(email).split("@")[0],
     email,
     role: "agent",
+    show_name: show_name === true,
+    chat_visibility: vis,
   });
   if (pErr) {
     await admin.auth.admin.deleteUser(created.user.id); // no dejar usuarios huérfanos

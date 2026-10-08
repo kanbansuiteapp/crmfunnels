@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { Icon } from "@/components/ui/Icon";
 
 type Item = { href: string; label: string; icon: string };
 type Section = { key: string; icon: string; label: string; title?: string; href?: string; items?: Item[]; divider?: boolean; bottom?: boolean };
@@ -81,7 +82,12 @@ export function Sidebar({ pipelineId }: { pipelineId: string | null }) {
         { key: "groups", icon: "users", label: "Grupos y comunidades", href: "/groups" },
         { key: "tools", icon: "tools", label: "Herramientas", href: "/tools" },
         { key: "reports", icon: "pie", label: "Reportes", href: "/reports" },
-        { key: "settings", icon: "settings", label: "Configuración", title: "Configuración", items: [{ href: "/team", label: "Equipo", icon: "👥" }] },
+        { key: "settings", icon: "settings", label: "Configuración", title: "Configuración", items: [
+          { href: "/settings/tags", label: "Tags", icon: "i:tag" },
+          { href: "/settings/custom-fields", label: "Campos customizados", icon: "i:filePlus" },
+          { href: "/settings/agents", label: "Agentes", icon: "i:users" },
+          { href: "/settings/templates", label: "Plantillas", icon: "i:file" },
+        ] },
       ];
 
   const current = sections.find((s) => (s.href ? on(s.href) : s.items?.some((i) => on(i.href))));
@@ -140,7 +146,7 @@ export function Sidebar({ pipelineId }: { pipelineId: string | null }) {
                       on(i.href) ? "bg-indigo-50 font-semibold text-indigo-700" : "text-slate-600 hover:bg-slate-100"
                     }`}
                   >
-                    <span aria-hidden>{i.icon}</span>
+                    {i.icon.startsWith("i:") ? <Icon name={i.icon.slice(2) as never} size={20} /> : <span aria-hidden>{i.icon}</span>}
                     {i.label}
                   </Link>
                 </li>
@@ -164,7 +170,7 @@ export function Sidebar({ pipelineId }: { pipelineId: string | null }) {
               on(i.href) ? "bg-indigo-50 font-semibold text-indigo-700" : "text-slate-600"
             }`}
           >
-            {i.icon !== "•" && i.icon} {i.label}
+            {i.icon !== "•" && !i.icon.startsWith("i:") && i.icon} {i.label}
           </Link>
         ))}
       </nav>
