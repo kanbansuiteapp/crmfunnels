@@ -20,8 +20,12 @@ export default async function PipelinePage({ params }: { params: { id: string } 
   if (!pipeline) notFound();
 
   return (
-    <main className="flex h-full flex-col p-4">
-      <h1 className="mb-4 text-xl font-semibold">{pipeline.name}</h1>
+    <main className="flex h-full min-h-0 w-full flex-col p-6 md:px-10 md:py-8">
+      <h1 className="text-3xl font-semibold text-slate-900">Tableros</h1>
+      <p className="mt-2 text-sm text-slate-500">Organiza tus oportunidades de venta por etapas y arrástralas para avanzar.</p>
+      <div className="mb-6 mt-6 flex items-center gap-8 border-b border-slate-100" role="tablist">
+        <span role="tab" aria-selected="true" className="-mb-px border-b-2 border-indigo-500 px-1 pb-3 text-sm font-medium text-indigo-600">{pipeline.name}</span>
+      </div>
       <KanbanBoard
         pipelineId={pipeline.id}
         stages={(stages ?? []) as Stage[]}

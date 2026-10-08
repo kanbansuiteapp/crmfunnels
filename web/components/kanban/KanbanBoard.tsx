@@ -17,6 +17,8 @@ import { createClient } from "@/lib/supabase/client";
 import { Column } from "./Column";
 import { DealCardView } from "./DealCard";
 import { NewDealForm } from "./NewDealForm";
+import { stageColor } from "./stageColor";
+import { btnPrimary, SearchBox } from "@/components/settings/kit";
 import type { Agent, Deal, Stage } from "./types";
 
 type Props = {
@@ -37,6 +39,8 @@ export function KanbanBoard({ pipelineId, stages, initialDeals, agents }: Props)
   const [agentFilter, setAgentFilter] = useState<string>("all");
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [q, setQ] = useState("");
+  const agentNames = useMemo(() => new Map(agents.map((a) => [a.id, a.name])), [agents]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
@@ -68,7 +72,10 @@ export function KanbanBoard({ pipelineId, stages, initialDeals, agents }: Props)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase, pipelineId, activeId]);
 
-  const visible = deals.filter((d) => agentFilter === "all" || d.assignee_id === agentFilter);
+  const needle = q.trim().toLowerCase();
+  const visible = deals.filter((d) =>
+    (agentFilter === "all" || d.assignee_id === agentFilter) &&
+    (!needle || `${d.title} ${d.contact?.name ?? ""} ${d.contact?.phone_number ?? ""}`.toLowerCase().includes(needle)));
   const byStage = (stageId: string) => visible.filter((d) => d.stage_id === stageId);
   const activeDeal = deals.find((d) => d.id === activeId) ?? null;
 
@@ -126,27 +133,25 @@ export function KanbanBoard({ pipelineId, stages, initialDeals, agents }: Props)
     }
   }
 
+  const filtered = agentFilter !== "all" || !!q;
   return (
-    <div className="flex h-full flex-col gap-3">
-      <div className="flex items-center gap-3">
-        <label className="text-sm text-slate-600" htmlFor="agent">Agente</label>
-        <select
-          id="agent"
-          value={agentFilter}
-          onChange={(e) => setAgentFilter(e.target.value)}
-          className="rounded border px-2 py-1 text-sm"
-        >
-          <option value="all">Todos</option>
-          {agents.map((a) => (
-            <option key={a.id} value={a.id}>{a.name}</option>
-          ))}
-        </select>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex flex-wrap items-center gap-3">
+        <SearchBox value={q} onChange={setQ} />
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          Agente
+          <select value={agentFilter} onChange={(e) => setAgentFilter(e.target.value)}
+            className="rounded-md border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:border-indigo-400">
+            <option value="all">Todos</option>
+            {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+        </label>
+        <button onClick={() => { setQ(""); setAgentFilter("all"); }} disabled={!filtered} className="text-sm font-medium text-indigo-600 hover:text-indigo-800 disabled:text-indigo-300">
+          Limpiar todos los filtros
+        </button>
         {error && <span className="text-sm text-red-600" role="alert">{error}</span>}
-        <button
-          onClick={() => setShowForm(true)}
-          className="ml-auto rounded bg-sky-600 px-3 py-1.5 text-sm font-medium text-white"
-        >
-          + Nuevo deal
+        <button onClick={() => setShowForm(true)} className={`${btnPrimary} ml-auto`}>
+          <span className="text-lg leading-none">+</span> Nuevo deal
         </button>
       </div>
       {showForm && (
@@ -165,12 +170,12 @@ export function KanbanBoard({ pipelineId, stages, initialDeals, agents }: Props)
         onDragOver={onDragOver}
         onDragEnd={onDragEnd}
       >
-        <div className="flex flex-1 gap-3 overflow-x-auto pb-2">
-          {[...stages].sort((a, b) => a.order_position - b.order_position).map((s) => (
-            <Column key={s.id} stage={s} deals={byStage(s.id)} />
+        <div className="mt-6 flex min-h-0 flex-1 items-stretch gap-4 overflow-x-auto pb-3">
+          {[...stages].sort((a, b) => a.order_position - b.order_position).map((s, i) => (
+            <Column key={s.id} stage={s} color={stageColor(s.name, i)} deals={byStage(s.id)} agents={agentNames} />
           ))}
         </div>
-        <DragOverlay>{activeDeal ? <DealCardView deal={activeDeal} /> : null}</DragOverlay>
+        <DragOverlay>{activeDeal ? <DealCardView deal={activeDeal} assignee={activeDeal.assignee_id ? agentNames.get(activeDeal.assignee_id) : null} /> : null}</DragOverlay>
       </DndContext>
     </div>
   );
