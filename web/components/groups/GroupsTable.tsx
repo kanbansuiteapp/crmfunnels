@@ -1,0 +1,157 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+
+export type WaGroup = {
+  id: string; name: string; origin: string; type: "group" | "community" | "channel";
+  clicks: number; admins: number; participants: number; scheduled_messages: number;
+  capacity: number | null; created_at: string; updated_at: string;
+};
+
+type ColKey = "origin" | "clicks" | "admins" | "participants" | "scheduled_messages" | "type" | "capacity" | "created_at" | "updated_at";
+const COLS: { key: ColKey; label: string }[] = [
+  { key: "origin", label: "Origen" }, { key: "clicks", label: "Clicks" }, { key: "admins", label: "Admins" },
+  { key: "participants", label: "Participantes" }, { key: "scheduled_messages", label: "Msg. programados" },
+  { key: "type", label: "Tipo" }, { key: "capacity", label: "Capacidad" }, { key: "created_at", label: "Creado" },
+  { key: "updated_at", label: "Actualización" },
+];
+const TYPES = { group: "Grupo", community: "Comunidad", channel: "Canal" } as const;
+const ORIGINS: Record<string, string> = { import: "Importado", created: "Creado" };
+const day = (iso: string) => new Date(iso).toLocaleDateString("es", { day: "2-digit", month: "short", year: "numeric" }).replace(/\./g, "");
+
+export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; devices: { id: string; name: string }[]; isAdmin: boolean }) {
+  const [q, setQ] = useState("");
+  const [type, setType] = useState("");
+  const [sort, setSort] = useState<{ key: "name" | "created_at"; dir: 1 | -1 }>({ key: "created_at", dir: -1 });
+  const [cols, setCols] = useState<Record<ColKey, boolean>>(Object.fromEntries(COLS.map((c) => [c.key, true])) as Record<ColKey, boolean>);
+  const [menu, setMenu] = useState<null | "cols" | "filter">(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [importOpen, setImportOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const close = (e: MouseEvent) => box.current && !box.current.contains(e.target as Node) && setMenu(null);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+
+  const rows = useMemo(() => {
+    const s = q.trim().toLowerCase();
+    return groups
+      .filter((g) => (!type || g.type === type) && (!s || g.name.toLowerCase().includes(s)))
+      .sort((a, b) => (sort.key === "name" ? a.name.localeCompare(b.name) : +new Date(a.created_at) - +new Date(b.created_at)) * sort.dir);
+  }, [groups, q, type, sort]);
+
+  const toggleSort = (key: "name" | "created_at") => setSort((s) => (s.key === key ? { key, dir: (s.dir * -1) as 1 | -1 } : { key, dir: key === "name" ? 1 : -1 }));
+  const allOn = rows.length > 0 && rows.every((r) => picked.has(r.id));
+  const th = "whitespace-nowrap px-4 py-4 text-xs font-medium uppercase tracking-wide text-slate-500";
+  const visible = COLS.filter((c) => cols[c.key]);
+  const cell = (g: WaGroup, k: ColKey) =>
+    k === "origin" ? ORIGINS[g.origin] ?? g.origin
+    : k === "type" ? TYPES[g.type]
+    : k === "capacity" ? g.capacity ?? "—"
+    : k === "created_at" ? day(g.created_at)
+    : k === "updated_at" ? day(g.updated_at)
+    : g[k];
+
+  return (
+    <div>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Grupos, Comunidades y Canales</h1>
+          <p className="text-sm text-slate-500">{groups.length} registros en total</p>
+        </div>
+        {isAdmin && (
+          <button onClick={() => setImportOpen(true)} className="shrink-0 rounded-full bg-slate-900 px-5 py-3 text-sm font-medium text-white hover:bg-slate-700">⇪ Importar</button>
+        )}
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <input type="search" aria-label="Buscar por nombre" placeholder="Buscar por nombre..." value={q} onChange={(e) => setQ(e.target.value)}
+          className="w-full max-w-sm rounded-full border bg-white px-5 py-3 text-sm" />
+        <div className="relative flex gap-3" ref={box}>
+          <button onClick={() => setMenu(menu === "cols" ? null : "cols")} className="rounded-full border bg-white px-5 py-3 text-sm shadow-sm">▥ Columnas</button>
+          <button onClick={() => setMenu(menu === "filter" ? null : "filter")} className="rounded-full border bg-white px-5 py-3 text-sm shadow-sm">⏷ Filtrar</button>
+          {menu === "cols" && (
+            <ul className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl border bg-white py-2 shadow-lg">
+              {COLS.map((c) => (
+                <li key={c.key}>
+                  <label className="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-slate-50">
+                    <input type="checkbox" checked={cols[c.key]} onChange={() => setCols({ ...cols, [c.key]: !cols[c.key] })} /> {c.label}
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+          {menu === "filter" && (
+            <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl border bg-white p-4 shadow-lg">
+              <label className="block text-xs text-slate-600">Tipo
+                <select value={type} onChange={(e) => setType(e.target.value)} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm">
+                  <option value="">Todos</option>
+                  {Object.entries(TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </label>
+              {type && <button onClick={() => setType("")} className="mt-3 text-sm text-indigo-600 hover:underline">Limpiar filtro</button>}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="overflow-x-auto rounded-2xl border bg-white">
+        <table className="w-full min-w-[1000px] text-left text-sm">
+          <thead className="bg-slate-50">
+            <tr>
+              <th className="w-12 px-4 py-4">
+                <input type="checkbox" aria-label="Seleccionar todos" checked={allOn}
+                  onChange={() => setPicked(allOn ? new Set() : new Set(rows.map((r) => r.id)))} />
+              </th>
+              <th className={th}><button onClick={() => toggleSort("name")} className="uppercase">Nombre ⇅</button></th>
+              {visible.map((c) => (
+                <th key={c.key} className={th}>
+                  {c.key === "created_at"
+                    ? <button onClick={() => toggleSort("created_at")} className="uppercase">{c.label} {sort.key === "created_at" ? (sort.dir === -1 ? "↓" : "↑") : ""}</button>
+                    : c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 && (
+              <tr><td colSpan={visible.length + 2} className="px-4 py-16 text-center text-slate-500">
+                {groups.length === 0 ? "Aún no hay grupos, comunidades ni canales." : "Ningún registro coincide con los filtros."}
+              </td></tr>
+            )}
+            {rows.map((g) => (
+              <tr key={g.id} className="border-t">
+                <td className="px-4 py-4">
+                  <input type="checkbox" aria-label={`Seleccionar ${g.name}`} checked={picked.has(g.id)}
+                    onChange={() => setPicked((p) => { const n = new Set(p); n.has(g.id) ? n.delete(g.id) : n.add(g.id); return n; })} />
+                </td>
+                <td className="px-4 py-4 font-medium">{g.name}</td>
+                {visible.map((c) => <td key={c.key} className="whitespace-nowrap px-4 py-4 text-slate-600">{cell(g, c.key)}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {importOpen && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4" onMouseDown={() => setImportOpen(false)}>
+          <div role="dialog" aria-modal="true" aria-label="Importar grupos" onMouseDown={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 className="mb-1 text-lg font-semibold">Importar grupos</h2>
+            <p className="mb-4 text-sm text-slate-500">Elige el dispositivo del que quieres traer sus grupos, comunidades y canales.</p>
+            <select aria-label="Dispositivo" className="mb-4 w-full rounded-lg border px-4 py-3 text-sm">
+              <option value="">Seleccionar dispositivo</option>
+              {devices.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+            <p className="mb-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">La conexión con WhatsApp para traer los grupos aún no está activada.</p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setImportOpen(false)} className="rounded-lg border px-4 py-2 text-sm">Cerrar</button>
+              <button disabled className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white opacity-50">Importar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
