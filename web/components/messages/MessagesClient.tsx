@@ -41,34 +41,105 @@ function Ring({ value }: { value: number | null }) {
   );
 }
 
-function Month({ items, onOpen }: { items: GroupMessage[]; onOpen: (m: GroupMessage) => void }) {
-  const [cur, setCur] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
-  const start = new Date(cur); start.setDate(1 - ((cur.getDay() + 6) % 7)); // semana desde lunes
-  const days = Array.from({ length: 42 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d; });
-  const key = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-  const by = new Map<string, GroupMessage[]>();
-  for (const m of items) { const k = key(new Date(m.scheduled_at)); by.set(k, [...(by.get(k) ?? []), m]); }
+const CHIP: Record<St, string> = {
+  done: "bg-[#34b27b] text-white", scheduled: "bg-indigo-500 text-white", sending: "bg-amber-500 text-white",
+  failed: "bg-red-500 text-white", cancelled: "bg-slate-400 text-white",
+};
+const hm = (iso: string) => new Date(iso).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit", hour12: false });
+const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+const sameDay = (a: Date, b: Date) => dayKey(a) === dayKey(b);
+const startOfWeek = (d: Date) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
+
+function Chip({ m, onOpen }: { m: GroupMessage; onOpen: (m: GroupMessage) => void }) {
   return (
-    <div className="rounded-2xl border border-slate-300 bg-white">
-      <div className="flex items-center justify-between border-b px-5 py-4">
-        <button onClick={() => setCur(new Date(cur.getFullYear(), cur.getMonth() - 1, 1))} aria-label="Mes anterior" className="px-3 text-xl">‹</button>
-        <h2 className="text-lg font-semibold capitalize text-slate-900">{cur.toLocaleDateString("es", { month: "long", year: "numeric" })}</h2>
-        <button onClick={() => setCur(new Date(cur.getFullYear(), cur.getMonth() + 1, 1))} aria-label="Mes siguiente" className="px-3 text-xl">›</button>
-      </div>
-      <div className="grid grid-cols-7 border-b text-center text-sm font-semibold uppercase text-slate-600">
-        {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((d) => <div key={d} className="py-2">{d}</div>)}
-      </div>
-      <div className="grid grid-cols-7">
-        {days.map((d) => (
-          <div key={key(d)} className={`min-h-28 border-b border-r p-2 ${d.getMonth() === cur.getMonth() ? "" : "bg-slate-50 text-slate-400"}`}>
-            <p className="mb-1 text-sm font-medium">{d.getDate()}</p>
-            {(by.get(key(d)) ?? []).slice(0, 3).map((m) => (
-              <button key={m.id} onClick={() => onOpen(m)} className={`mb-1 block w-full truncate rounded px-2 py-1 text-left text-xs font-medium ${STATUS[m.status].cls}`} title={m.name}>{m.name}</button>
+    <button type="button" onClick={() => onOpen(m)} title={`${hm(m.scheduled_at)} - ${m.name}`}
+      className={`mb-1.5 flex w-full items-center gap-1.5 truncate rounded-md px-2.5 py-1.5 text-left text-sm font-medium ${CHIP[m.status]}`}>
+      <span aria-hidden className="shrink-0 text-xs">{m.status === "done" ? "✓✓" : m.status === "failed" ? "!" : "🕒"}</span>
+      <span className="truncate">{hm(m.scheduled_at)} - {m.name}</span>
+    </button>
+  );
+}
+
+function CalendarView({ items, onOpen }: { items: GroupMessage[]; onOpen: (m: GroupMessage) => void }) {
+  const [mode, setMode] = useState<"month" | "week">("month");
+  const [cur, setCur] = useState(() => new Date());
+  const [dayList, setDayList] = useState<Date | null>(null);
+  const today = new Date();
+
+  const by = useMemo(() => {
+    const map = new Map<string, GroupMessage[]>();
+    for (const m of [...items].sort((a, b) => +new Date(a.scheduled_at) - +new Date(b.scheduled_at))) {
+      const k = dayKey(new Date(m.scheduled_at));
+      map.set(k, [...(map.get(k) ?? []), m]);
+    }
+    return map;
+  }, [items]);
+
+  const first = new Date(cur.getFullYear(), cur.getMonth(), 1);
+  const gridStart = mode === "month" ? startOfWeek(first) : startOfWeek(cur);
+  const weeks = mode === "month" ? Math.ceil(((first.getDay() + 6) % 7 + new Date(cur.getFullYear(), cur.getMonth() + 1, 0).getDate()) / 7) : 1;
+  const days = Array.from({ length: weeks * 7 }, (_, i) => { const d = new Date(gridStart); d.setDate(gridStart.getDate() + i); return d; });
+  const title = mode === "month"
+    ? cur.toLocaleDateString("es", { month: "long", year: "numeric" })
+    : `${days[0].toLocaleDateString("es", { day: "numeric", month: "short" })} – ${days[6].toLocaleDateString("es", { day: "numeric", month: "short", year: "numeric" })}`;
+  const shift = (n: number) => setCur(mode === "month" ? new Date(cur.getFullYear(), cur.getMonth() + n, 1) : new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 7 * n));
+  const cap = mode === "month" ? 3 : 50;
+
+  return (
+    <div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-2xl font-semibold capitalize text-slate-900">{title}</h2>
+        <div className="flex items-center gap-3">
+          <div className="flex overflow-hidden rounded-full border border-slate-300 bg-slate-50" role="group" aria-label="Vista">
+            {([["month", "Mes", "🗓"], ["week", "Semana", "🗓"]] as const).map(([v, l, ic]) => (
+              <button key={v} type="button" aria-pressed={mode === v} onClick={() => setMode(v)}
+                className={`px-5 py-2.5 text-base ${mode === v ? "bg-white font-semibold text-slate-900 shadow-sm" : "text-slate-600"}`}><span aria-hidden>{ic}</span> {l}</button>
             ))}
-            {(by.get(key(d))?.length ?? 0) > 3 && <p className="text-xs text-slate-500">+{(by.get(key(d))?.length ?? 0) - 3} más</p>}
           </div>
-        ))}
+          <button type="button" aria-label="Anterior" onClick={() => shift(-1)} className="h-11 w-11 rounded-full border border-slate-300 bg-white text-lg">‹</button>
+          <button type="button" onClick={() => setCur(new Date())} className="rounded-full border border-slate-300 bg-white px-6 py-2.5 text-base font-medium">Hoy</button>
+          <button type="button" aria-label="Siguiente" onClick={() => shift(1)} className="h-11 w-11 rounded-full border border-slate-300 bg-white text-lg">›</button>
+        </div>
       </div>
+
+      <div className="overflow-x-auto">
+        <div className="min-w-[860px]">
+          <div className="grid grid-cols-7 border-b border-slate-200 py-3 text-center text-base text-slate-600">
+            {["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"].map((d) => <div key={d}>{d}</div>)}
+          </div>
+          <div className="grid grid-cols-7">
+            {days.map((d) => {
+              const list = by.get(dayKey(d)) ?? [];
+              const out = mode === "month" && d.getMonth() !== cur.getMonth();
+              return (
+                <div key={dayKey(d)} className={`${mode === "week" ? "min-h-72" : "min-h-36"} border-b border-r border-slate-200 p-2.5 ${out ? "bg-slate-100" : ""}`}>
+                  <p className="mb-2">
+                    {sameDay(d, today)
+                      ? <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-900 text-base font-semibold text-white">{d.getDate()}</span>
+                      : <span className={`inline-block px-1 text-base ${out ? "text-slate-500" : "text-slate-800"}`}>{d.getDate()}</span>}
+                  </p>
+                  {list.slice(0, cap).map((m) => <Chip key={m.id} m={m} onOpen={onOpen} />)}
+                  {list.length > cap && (
+                    <button type="button" onClick={() => setDayList(d)} className="px-1 text-sm text-slate-700 hover:underline">+{list.length - cap} más</button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {dayList && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4" onMouseDown={() => setDayList(null)}>
+          <div role="dialog" aria-modal="true" aria-label="Mensajes del día" onMouseDown={(e) => e.stopPropagation()} className="max-h-[80vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold capitalize">{dayList.toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" })}</h3>
+              <button type="button" onClick={() => setDayList(null)} aria-label="Cerrar">✕</button>
+            </div>
+            {(by.get(dayKey(dayList)) ?? []).map((m) => <Chip key={m.id} m={m} onOpen={(x) => { setDayList(null); onOpen(x); }} />)}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -133,11 +204,11 @@ export function MessagesClient({ items, isAdmin }: { items: GroupMessage[]; isAd
         <input type="search" aria-label="Buscar por nombre" placeholder="Buscar por nombre" value={q} onChange={(e) => setQ(e.target.value)}
           className="w-full max-w-md rounded-full border border-slate-300 bg-white px-5 py-3 text-base text-slate-900" />
         <div className="relative flex gap-3" ref={box}>
-          <button onClick={() => setMenu(menu === "cols" ? null : "cols")} className="rounded-full border border-slate-300 bg-white px-5 py-3 text-base shadow-sm">▥ Columnas</button>
+          {!calendar && <button onClick={() => setMenu(menu === "cols" ? null : "cols")} className="rounded-full border border-slate-300 bg-white px-5 py-3 text-base shadow-sm">▥ Columnas</button>}
           <button onClick={() => setMenu(menu === "filter" ? null : "filter")} className="rounded-full border border-slate-300 bg-white px-5 py-3 text-base shadow-sm">⏷ Filtrar</button>
-          <button onClick={() => setCalendar((v) => !v)} aria-pressed={calendar} aria-label="Vista de calendario" title={calendar ? "Ver tabla" : "Ver calendario"}
-            className={`rounded-full border border-slate-300 px-4 py-3 text-base shadow-sm ${calendar ? "bg-slate-900 text-white" : "bg-white"}`}>🗓</button>
-          {menu === "cols" && (
+          <button onClick={() => { setCalendar((v) => !v); setMenu(null); }} aria-label={calendar ? "Ver lista" : "Ver calendario"} title={calendar ? "Ver lista" : "Ver calendario"}
+            className="rounded-full border border-slate-300 bg-white px-4 py-3 text-base shadow-sm">{calendar ? "☰" : "🗓"}</button>
+          {menu === "cols" && !calendar && (
             <ul className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl border bg-white py-2 shadow-lg">
               {COLS.map((c) => (
                 <li key={c.key}><label className="flex cursor-pointer items-center gap-2 px-4 py-2 text-sm hover:bg-slate-50">
@@ -167,7 +238,7 @@ export function MessagesClient({ items, isAdmin }: { items: GroupMessage[]; isAd
         </div>
       )}
 
-      {calendar ? <Month items={rows} onOpen={setView} /> : (
+      {calendar ? <CalendarView items={rows} onOpen={setView} /> : (
         <div className="scroll-x max-h-[calc(100vh-17rem)] rounded-2xl border border-slate-300 bg-white">
           <table className="w-full min-w-[900px] text-left text-base text-slate-900">
             <thead className="sticky top-0 z-10 bg-slate-100">
