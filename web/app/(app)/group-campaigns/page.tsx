@@ -15,12 +15,11 @@ export default async function CampaignsPage() {
   const supabase = createClient();
   const { data: auth } = await supabase.auth.getUser();
   const groupCols = "id, name, type, participants, admins, capacity, avatar_url, channel:channels(status)";
-  const [{ data: me }, { data: camps }, { data: groups }] = await Promise.all([
+  const [{ data: me }, { data: camps }] = await Promise.all([
     supabase.from("profiles").select("role").eq("id", auth.user?.id ?? "").maybeSingle(),
     supabase.from("group_campaigns")
       .select(`id, name, slug, type, clicks, links:group_campaign_groups(position, group:wa_groups(${groupCols}))`)
       .order("created_at", { ascending: false }),
-    supabase.from("wa_groups").select(groupCols).order("name"),
   ]);
   if (!me) redirect("/");
 
@@ -31,7 +30,7 @@ export default async function CampaignsPage() {
 
   return (
     <main className="p-4 md:p-5">
-      <CampaignsClient campaigns={campaigns} available={((groups ?? []) as unknown as RawGroup[]).map(lite)} isAdmin={me.role === "admin"} />
+      <CampaignsClient campaigns={campaigns} isAdmin={me.role === "admin"} />
     </main>
   );
 }
