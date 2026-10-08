@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 const initials = (name: string) =>
   name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("") || "?";
 
-export function UserMenu({ name, email, role }: { name: string; email: string; role: string }) {
+export function UserMenu({ name, email, role, isPlatform = false }: { name: string; email: string; role: string; isPlatform?: boolean }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -53,6 +53,10 @@ export function UserMenu({ name, email, role }: { name: string; email: string; r
             <p className="truncate text-xs text-slate-500">{email}</p>
             <p className="text-xs text-slate-500">{role === "admin" ? "Administrador" : "Agente"}</p>
           </div>
+          {isPlatform && (
+            <Link role="menuitem" href="/platform" onClick={() => setOpen(false)}
+              className="block rounded-lg px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-slate-100">Panel de plataforma</Link>
+          )}
           <Link role="menuitem" href="/profile" onClick={() => setOpen(false)}
             className="block rounded-lg px-3 py-2 text-sm hover:bg-slate-100">Mi perfil</Link>
           <button role="menuitem" onClick={logout}

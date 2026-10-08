@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { Onboarding } from "./onboarding";
 
 export default async function Home() {
   const supabase = createClient();
@@ -12,5 +11,6 @@ export default async function Home() {
     .maybeSingle();
 
   if (pipeline) redirect(`/pipelines/${pipeline.id}`);
-  return <Onboarding />;
+  // sin empresa activa (suspendida o sin asignar) no hay nada que mostrar
+  redirect("/account-suspended");
 }
