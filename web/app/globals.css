@@ -1,3 +1,18 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Paleta de gráficos validada (claro). Colores categóricos en orden fijo; texto siempre en tokens de texto. */
+.viz-root {
+  --surface: #fcfcfb;
+  --grid: #e7e6e2;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #6b6a66;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-other: #9a9994;
+}
