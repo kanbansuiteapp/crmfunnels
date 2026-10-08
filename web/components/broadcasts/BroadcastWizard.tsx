@@ -7,6 +7,19 @@ import { createClient } from "@/lib/supabase/client";
 import { PhonePreview } from "@/components/whalinks/WhalinkForm";
 
 type Device = { id: string; name: string; phone: string; status: string };
+type Mode = "any" | "all" | "exclude";
+const MODES: { v: Mode; title: string; sub: string }[] = [
+  { v: "any", title: "Contiene algunos", sub: "Contactos con al menos uno de los tags seleccionados" },
+  { v: "all", title: "Contiene todos", sub: "Contactos que tengan todos los tags seleccionados" },
+  { v: "exclude", title: "Excluir público", sub: "Contactos que NO tengan ninguno de los tags seleccionados" },
+];
+// prefijo telefónico → país
+const COUNTRIES: [string, string][] = [
+  ["57", "Colombia"], ["52", "México"], ["54", "Argentina"], ["56", "Chile"], ["51", "Perú"], ["593", "Ecuador"],
+  ["58", "Venezuela"], ["591", "Bolivia"], ["595", "Paraguay"], ["598", "Uruguay"], ["506", "Costa Rica"], ["507", "Panamá"],
+  ["502", "Guatemala"], ["503", "El Salvador"], ["504", "Honduras"], ["505", "Nicaragua"], ["53", "Cuba"], ["34", "España"],
+  ["55", "Brasil"], ["1", "Estados Unidos / Canadá"],
+];
 const DOTS = ["bg-black", "bg-orange-500", "bg-yellow-400", "bg-blue-500", "bg-slate-500"];
 const isOn = (d: Device) => d.status === "connected" || d.status === "open";
 const label4 = (d: Device) => `${d.name} (${d.phone ? d.phone.slice(-4) : "****"}) - ${isOn(d) ? "Conectado" : "Desconectado"}`;
@@ -25,8 +38,10 @@ export function BroadcastWizard({ devices, tags }: { devices: Device[]; tags: { 
   const supabase = useMemo(() => createClient(), []);
   const [step, setStep] = useState(0);
   const [f, setF] = useState({
-    name: "", channel: "", message: "", tag: "", when: "now" as "now" | "later", at: "", perMinute: 6,
+    name: "", channel: "", message: "", when: "now" as "now" | "later", at: "", perMinute: 6,
   });
+  const [aud, setAud] = useState<{ tags: string[]; mode: Mode; countries: string[] }>({ tags: [], mode: "any", countries: [] });
+  const [adding, setAdding] = useState<null | "menu" | "tags" | "country">(null);
   const [count, setCount] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -45,13 +60,10 @@ export function BroadcastWizard({ devices, tags }: { devices: Device[]; tags: { 
   useEffect(() => {
     let live = true;
     setCount(null);
-    const q = f.tag
-      ? supabase.from("contact_tags").select("contact_id, contacts!inner(do_not_contact)", { count: "exact", head: true })
-          .eq("tag_id", f.tag).eq("contacts.do_not_contact", false)
-      : supabase.from("contacts").select("id", { count: "exact", head: true }).eq("do_not_contact", false);
-    q.then(({ count: n }) => live && setCount(n ?? 0));
+    supabase.rpc("count_audience", { p_tags: aud.tags, p_mode: aud.mode, p_codes: aud.countries })
+      .then(({ data }) => live && setCount((data as number | null) ?? 0));
     return () => { live = false; };
-  }, [f.tag, supabase]);
+  }, [aud, supabase]);
 
   const valid = [
     f.name.trim() && f.channel && f.message.trim(),
@@ -62,9 +74,9 @@ export function BroadcastWizard({ devices, tags }: { devices: Device[]; tags: { 
   async function create() {
     setBusy(true);
     setErr(null);
-    const { error } = await supabase.rpc("create_broadcast", {
-      p_name: f.name, p_channel: f.channel, p_message: f.message, p_tag: f.tag || null, p_per_minute: f.perMinute,
-      p_scheduled_at: f.when === "later" ? new Date(f.at).toISOString() : null,
+    const { error } = await supabase.rpc("create_broadcast_audience", {
+      p_name: f.name, p_channel: f.channel, p_message: f.message, p_tags: aud.tags, p_mode: aud.mode, p_codes: aud.countries,
+      p_per_minute: f.perMinute, p_scheduled_at: f.when === "later" ? new Date(f.at).toISOString() : null,
     });
     setBusy(false);
     if (error) return setErr(error.message);
@@ -98,7 +110,103 @@ export function BroadcastWizard({ devices, tags }: { devices: Device[]; tags: { 
         ))}
       </ol>
 
-      <div className="grid gap-8 lg:grid-cols-2">
+      <div>
+        {step === 1 && (
+          <div className="mb-8">
+            <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+              <div className="flex items-center gap-4 rounded-xl border bg-white px-5 py-4">
+                <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-indigo-500 text-xl text-white" aria-hidden>👤</span>
+                <div>
+                  <p className="text-sm">Envío masivo a:</p>
+                  <p><span className="text-2xl font-semibold">{count ?? "…"}</span> <span className="text-sm text-slate-500">Contactos</span></p>
+                </div>
+              </div>
+              <div className="relative">
+                <button type="button" onClick={() => setAdding(adding ? null : "menu")}
+                  className="rounded-lg bg-indigo-500 px-5 py-3 text-sm font-medium text-white hover:bg-indigo-600">⏷ Añadir filtro</button>
+                {adding === "menu" && (
+                  <ul className="absolute right-0 z-20 mt-2 w-56 rounded-xl border bg-white py-2 shadow-lg">
+                    <li><button type="button" onClick={() => setAdding("tags")} className="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50">🏷️ Filtros por Tags</button></li>
+                    <li><button type="button" onClick={() => setAdding("country")} className="w-full px-4 py-2.5 text-left text-sm hover:bg-slate-50">🌐 Filtro por País</button></li>
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            {(adding === "tags" || aud.tags.length > 0) && (
+              <section className="mb-4 rounded-xl border bg-white p-5">
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="font-semibold">Filtros por Tags</h3>
+                  <button type="button" onClick={() => { setAud({ ...aud, tags: [], mode: "any" }); setAdding(null); }} className="text-sm text-indigo-600 hover:underline">Quitar</button>
+                </div>
+                <div className="mb-4 grid gap-2 md:grid-cols-3">
+                  {MODES.map((m) => (
+                    <label key={m.v} className={`cursor-pointer rounded-lg border p-3 text-sm ${aud.mode === m.v ? "border-indigo-500 bg-indigo-50" : ""}`}>
+                      <input type="radio" name="mode" className="mr-2" checked={aud.mode === m.v} onChange={() => setAud({ ...aud, mode: m.v })} />
+                      <b>{m.title}</b><span className="mt-1 block text-xs text-slate-500">{m.sub}</span>
+                    </label>
+                  ))}
+                </div>
+                {tags.length === 0 && <p className="text-sm text-slate-500">Aún no tienes tags.</p>}
+                <div className="flex flex-wrap gap-2">
+                  {tags.map((t) => {
+                    const on = aud.tags.includes(t.id);
+                    return (
+                      <button key={t.id} type="button" aria-pressed={on}
+                        onClick={() => setAud({ ...aud, tags: on ? aud.tags.filter((x) => x !== t.id) : [...aud.tags, t.id] })}
+                        className={`rounded-full border px-3 py-1 text-sm ${on ? "border-indigo-500 bg-indigo-500 text-white" : "hover:bg-slate-50"}`}>{t.name}</button>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            {(adding === "country" || aud.countries.length > 0) && (
+              <section className="mb-4 rounded-xl border bg-white p-5">
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="font-semibold">Filtro por País</h3>
+                  <button type="button" onClick={() => { setAud({ ...aud, countries: [] }); setAdding(null); }} className="text-sm text-indigo-600 hover:underline">Quitar</button>
+                </div>
+                <p className="mb-3 text-sm text-slate-500">Selecciona uno o varios países según el prefijo del teléfono.</p>
+                <div className="flex flex-wrap gap-2">
+                  {COUNTRIES.map(([code, name]) => {
+                    const on = aud.countries.includes(code);
+                    return (
+                      <button key={code} type="button" aria-pressed={on}
+                        onClick={() => setAud({ ...aud, countries: on ? aud.countries.filter((x) => x !== code) : [...aud.countries, code] })}
+                        className={`rounded-full border px-3 py-1 text-sm ${on ? "border-indigo-500 bg-indigo-500 text-white" : "hover:bg-slate-50"}`}>{name} (+{code})</button>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            {aud.tags.length === 0 && aud.countries.length === 0 && adding !== "tags" && adding !== "country" && (
+              <div className="mx-auto mt-10 max-w-3xl rounded-3xl border bg-slate-50 p-8">
+                <div className="mb-6 flex items-center gap-4">
+                  <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-indigo-500 text-2xl text-white" aria-hidden>⏷</span>
+                  <div>
+                    <h3 className="text-xl font-semibold">Crea tu audiencia segmentada</h3>
+                    <p className="text-slate-500">Agrega filtros para definir quién recibirá tu envío masivo</p>
+                  </div>
+                </div>
+                <div className="mb-4 rounded-xl border bg-white p-5">
+                  <p className="font-semibold">🏷️ Filtros por Tags</p>
+                  <p className="mt-1 text-sm text-slate-500">Selecciona tags y elige cómo aplicarlos:</p>
+                  <ul className="mt-2 space-y-1 text-sm">
+                    {MODES.map((m) => <li key={m.v}><span className="text-indigo-500">✓</span> <b>{m.title}:</b> <span className="text-slate-500">{m.sub}</span></li>)}
+                  </ul>
+                </div>
+                <div className="rounded-xl border bg-white p-5">
+                  <p className="font-semibold">🌐 Filtro por País</p>
+                  <p className="mt-1 text-sm text-slate-500">Selecciona uno o varios países para segmentar tu audiencia por ubicación geográfica.</p>
+                </div>
+              </div>
+            )}
+            {count === 0 && <p className="mt-4 text-sm text-red-600" role="alert">Ningún contacto cumple los filtros.</p>}
+          </div>
+        )}
+      <div className={step === 1 ? "" : "grid gap-8 lg:grid-cols-2"}>
         <div className="space-y-5">
           {step === 0 && (
             <>
@@ -136,22 +244,9 @@ export function BroadcastWizard({ devices, tags }: { devices: Device[]; tags: { 
           )}
 
           {step === 1 && (
-            <>
-              <div>
-                <label htmlFor="aud" className={label}>Audiencia</label>
-                <select id="aud" value={f.tag} onChange={(e) => setF({ ...f, tag: e.target.value })} className={input}>
-                  <option value="">Todos los contactos</option>
-                  {tags.map((t) => <option key={t.id} value={t.id}>Etiqueta: {t.name}</option>)}
-                </select>
-              </div>
-              <p className="rounded-lg bg-indigo-50 p-4 text-sm text-indigo-900">
-                {count === null ? "Calculando…" : <><b>{count}</b> {count === 1 ? "contacto recibirá" : "contactos recibirán"} este envío.</>}
-                {count === 0 && " Ningún contacto cumple el filtro."}
-              </p>
-              <p className="text-xs text-slate-500">
-                Quienes hayan respondido STOP, baja o cancelar quedan excluidos. La lista se fija al crear el envío.
-              </p>
-            </>
+            <p className="text-sm text-slate-500">
+              Define quién recibirá el envío con los filtros de la derecha. Quienes hayan respondido STOP, baja o cancelar quedan excluidos.
+            </p>
           )}
 
           {step === 2 && (
@@ -205,9 +300,12 @@ export function BroadcastWizard({ devices, tags }: { devices: Device[]; tags: { 
           </div>
         </div>
 
-        <div className="rounded-2xl bg-slate-50 p-8">
-          <PhonePreview device={device && device.phone ? device : undefined} message={f.message} />
-        </div>
+        {step !== 1 && (
+          <div className="rounded-2xl bg-slate-50 p-8">
+            <PhonePreview device={device && device.phone ? device : undefined} message={f.message} />
+          </div>
+        )}
+      </div>
       </div>
     </div>
   );
