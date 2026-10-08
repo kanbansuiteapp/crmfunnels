@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -44,7 +45,6 @@ export function WhalinksClient({ links, channels, isAdmin }: { links: Whalink[];
   const [sort, setSort] = useState<Sort>({ key: "created_at", dir: -1 });
   const [deviceIds, setDeviceIds] = useState<string[]>([]);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [editing, setEditing] = useState<Whalink | "new" | null>(null);
   const [viewing, setViewing] = useState<Whalink | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -100,9 +100,9 @@ export function WhalinksClient({ links, channels, isAdmin }: { links: Whalink[];
           <p className="text-sm text-slate-500">Links que dirigen a iniciar una conversación a tu número de WhatsApp con un mensaje predeterminado.</p>
         </div>
         {isAdmin && (
-          <button onClick={() => setEditing("new")} className="shrink-0 rounded-lg bg-indigo-500 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-600">
+          <Link href="/whalinks/new" className="shrink-0 rounded-lg bg-indigo-500 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-600">
             + Crear link
-          </button>
+          </Link>
         )}
       </div>
 
@@ -173,7 +173,7 @@ export function WhalinksClient({ links, channels, isAdmin }: { links: Whalink[];
                 <td className="px-5 py-4">
                   <span className="flex justify-end gap-3 text-lg opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
                     <button onClick={() => setViewing(l)} aria-label={`Ver ${l.name}`} title="Ver detalle">👁</button>
-                    {isAdmin && <button onClick={() => setEditing(l)} aria-label={`Editar ${l.name}`} title="Editar">✎</button>}
+                    {isAdmin && <Link href={`/whalinks/${l.id}/edit`} aria-label={`Editar ${l.name}`} title="Editar">✎</Link>}
                     {isAdmin && <button onClick={() => remove(l)} aria-label={`Eliminar ${l.name}`} title="Eliminar">🗑</button>}
                   </span>
                 </td>
@@ -182,11 +182,6 @@ export function WhalinksClient({ links, channels, isAdmin }: { links: Whalink[];
           </tbody>
         </table>
       </div>
-
-      {editing && (
-        <EditModal link={editing === "new" ? null : editing} channels={channels}
-          onClose={() => setEditing(null)} onSaved={() => { setEditing(null); router.refresh(); }} />
-      )}
 
       {viewing && (
         <Modal title={viewing.name} onClose={() => setViewing(null)}>
@@ -209,59 +204,5 @@ export function WhalinksClient({ links, channels, isAdmin }: { links: Whalink[];
         </Modal>
       )}
     </div>
-  );
-}
-
-function EditModal({ link, channels, onClose, onSaved }: { link: Whalink | null; channels: Channel[]; onClose: () => void; onSaved: () => void }) {
-  const [f, setF] = useState({
-    name: link?.name ?? "", channel: link?.channel_id ?? channels[0]?.id ?? "", message: link?.message ?? "", tag: link?.tag_name ?? "",
-  });
-  const [err, setErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const input = "w-full rounded-lg border px-3 py-2.5 text-sm";
-
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setErr(null);
-    const supabase = createClient();
-    const { error } = link
-      ? await supabase.rpc("update_whalink", { p_id: link.id, p_name: f.name, p_channel: f.channel, p_message: f.message, p_tag: f.tag })
-      : await supabase.rpc("create_whalink", { p_name: f.name, p_channel: f.channel, p_message: f.message, p_tag: f.tag });
-    setBusy(false);
-    if (error) return setErr(error.message);
-    onSaved();
-  }
-
-  return (
-    <Modal title={link ? "Editar link" : "Crear link"} onClose={onClose}>
-      {channels.length === 0 ? (
-        <p className="text-sm text-slate-500">Necesitas un canal con número de teléfono configurado para crear links.</p>
-      ) : (
-        <form onSubmit={save} className="space-y-3">
-          <label className="block text-sm font-medium">Nombre
-            <input required autoFocus value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Ej. Instagram – bio" className={`${input} mt-1 font-normal`} />
-          </label>
-          <label className="block text-sm font-medium">Dispositivo
-            <select value={f.channel} onChange={(e) => setF({ ...f, channel: e.target.value })} className={`${input} mt-1 font-normal`}>
-              {channels.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.phone})</option>)}
-            </select>
-          </label>
-          <label className="block text-sm font-medium">Mensaje predeterminado
-            <textarea rows={3} maxLength={500} value={f.message} onChange={(e) => setF({ ...f, message: e.target.value })}
-              placeholder="Ej. Hola, quiero información" className={`${input} mt-1 font-normal`} />
-          </label>
-          <label className="block text-sm font-medium">Etiqueta para quien escriba <span className="font-normal text-slate-400">(opcional)</span>
-            <input value={f.tag} onChange={(e) => setF({ ...f, tag: e.target.value })} className={`${input} mt-1 font-normal`} />
-          </label>
-          <p className="text-xs text-slate-500">Al final del mensaje se añade un código corto <b>(ref:xxxxxx)</b> para atribuir el lead a este link.</p>
-          {err && <p className="text-sm text-red-600" role="alert">{err}</p>}
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="rounded-lg border px-4 py-2 text-sm font-medium">Cancelar</button>
-            <button disabled={busy} className="rounded-lg bg-indigo-500 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50">{link ? "Guardar cambios" : "Crear link"}</button>
-          </div>
-        </form>
-      )}
-    </Modal>
   );
 }
