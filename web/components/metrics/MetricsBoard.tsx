@@ -107,7 +107,7 @@ export function MetricsBoard() {
   };
 
   return (
-    <main className="mx-auto max-w-7xl p-6 md:p-8">
+    <main className="w-full p-6 md:px-10 md:py-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold text-slate-900">Métricas</h1>
@@ -142,7 +142,7 @@ export function MetricsBoard() {
       ) : shown.length === 0 ? (
         <p className="mt-16 text-center text-slate-500">Este tablero no tiene gráficos. Usa “Nuevo gráfico” para añadir el primero.</p>
       ) : (
-        <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-8 grid grid-cols-[repeat(auto-fill,minmax(380px,1fr))] gap-6">
           {shown.map((c) => <CardView key={c.id} card={c} editing={editing} onRemove={() => removeChart(c.id)} />)}
         </div>
       )}

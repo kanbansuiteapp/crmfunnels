@@ -55,7 +55,7 @@ export function AddCardModal({ onClose, onAdd }: { onClose: () => void; onAdd: (
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label="Añadir tarjeta" className="flex max-h-[92vh] w-full max-w-6xl overflow-hidden rounded-xl bg-white shadow-2xl">
+      <div role="dialog" aria-modal="true" aria-label="Añadir tarjeta" className="flex max-h-[92vh] w-full max-w-[1500px] overflow-hidden rounded-xl bg-white shadow-2xl">
         <aside className="hidden w-80 shrink-0 overflow-y-auto border-r border-slate-100 p-6 md:block">
           <h2 className="text-2xl font-bold text-[#1d1b4d]">Añadir tarjeta</h2>
           <p className="mt-2 text-slate-500">Selecciona la opción que mejor se adapte a tus necesidades.</p>
