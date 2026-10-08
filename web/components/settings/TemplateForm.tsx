@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { Icon } from "@/components/ui/Icon";
 import { Alert, btnOutline, btnPrimary, inputCls, useMe } from "./kit";
 
 const CATEGORIES = [{ v: "marketing", l: "Marketing" }, { v: "utility", l: "Utilidad" }, { v: "authentication", l: "Autenticación" }];
@@ -13,6 +14,10 @@ const EMOJIS = ["😀", "😊", "👍", "🙏", "🎉", "❤️", "🔥", "✅"]
 
 type Channel = { id: string; name: string };
 type Var = { n: number; field: string; example: string };
+type Btn = { id: number; type: "quick_reply" | "url"; text: string; url: string };
+const BTN_TYPES = [{ v: "quick_reply", l: "Personalizado" }, { v: "url", l: "Ir al sitio web" }] as const;
+const MAX_BUTTONS = 10, MAX_URL = 2;
+const validUrl = (u: string) => /^https?:\/\/\S+\.\S+/i.test(u.trim());
 
 const varsIn = (body: string) => Array.from(new Set(Array.from(body.matchAll(/\{\{(\d+)\}\}/g)).map((m) => Number(m[1])))).sort((a, b) => a - b);
 
@@ -35,6 +40,9 @@ export function TemplateForm() {
   const [device, setDevice] = useState("");
   const [vars, setVars] = useState<Record<number, Var>>({});
   const [emoji, setEmoji] = useState(false);
+  const [buttons, setButtons] = useState<Btn[]>([]);
+  const [menu, setMenu] = useState(false);
+  const btnId = useRef(0);
   const [tried, setTried] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -49,6 +57,10 @@ export function TemplateForm() {
   const trimmed = body.trim();
   const bodyErr = !trimmed ? "El cuerpo es obligatorio." : /^\{\{\d+\}\}/.test(trimmed) ? "El cuerpo no puede empezar con una variable. Agrega texto antes de {{N}}." : /\{\{\d+\}\}$/.test(trimmed) ? "El cuerpo no puede terminar con una variable. Agrega texto después de {{N}}." : "";
   const varErr = nums.some((n) => !vars[n]?.example?.trim());
+  const btnErr = buttons.some((b) => !b.text.trim() || (b.type === "url" && !validUrl(b.url)));
+  const urlCount = buttons.filter((b) => b.type === "url").length;
+  const addButton = (type: Btn["type"]) => { setButtons([...buttons, { id: ++btnId.current, type, text: "", url: "" }]); setMenu(false); };
+  const setButton = (id: number, patch: Partial<Btn>) => setButtons(buttons.map((b) => (b.id === id ? { ...b, ...patch } : b)));
   const errs = { name: name.trim() ? "" : "El nombre es obligatorio.", device: device ? "" : "Selecciona un dispositivo.", body: bodyErr };
   const showErr = (k: keyof typeof errs) => (tried || (k === "body" && !!trimmed)) && errs[k];
 
@@ -67,11 +79,12 @@ export function TemplateForm() {
 
   const save = async () => {
     setTried(true);
-    if (errs.name || errs.device || errs.body || varErr || !me) return;
+    if (errs.name || errs.device || errs.body || varErr || btnErr || !me) return;
     setBusy(true); setErr(null);
     const { error } = await createClient().from("message_templates").insert({
       organization_id: me.orgId, channel_id: device, name: name.trim(), category, header_type: headerType,
       header_text: headerType === "text" ? headerText.trim() || null : null, body: trimmed, footer: footer.trim() || null,
+      buttons: buttons.map((b) => (b.type === "url" ? { type: b.type, text: b.text.trim(), url: b.url.trim() } : { type: b.type, text: b.text.trim() })),
       variables: nums.map((n) => ({ n, field: vars[n]?.field ?? "", example: vars[n]?.example.trim() })),
     });
     setBusy(false);
@@ -140,10 +153,48 @@ export function TemplateForm() {
 
           <Label text="Pie de página (Opcional)" hint={`${footer.length}/60`} />
           <input value={footer} maxLength={60} onChange={(e) => setFooter(e.target.value)} placeholder="Escribe el pie de página" className={inputCls} />
+
+          <Label text="Botones (Opcional)" />
+          <div className="relative inline-block">
+            <button type="button" onClick={() => setMenu(!menu)} aria-expanded={menu} disabled={buttons.length >= MAX_BUTTONS} className={`${btnOutline} disabled:opacity-50`}>
+              <span className="text-lg leading-none">+</span> Añadir botón <span aria-hidden>⌄</span>
+            </button>
+            {menu && (
+              <ul className="absolute left-0 z-10 mt-1 w-56 rounded-lg border bg-white py-1 shadow-lg">
+                {BTN_TYPES.map((t) => (
+                  <li key={t.v}>
+                    <button type="button" disabled={t.v === "url" && urlCount >= MAX_URL} onClick={() => addButton(t.v)} className="w-full px-4 py-2 text-left text-sm hover:bg-slate-50 disabled:text-slate-300 disabled:hover:bg-transparent">
+                      {t.l}{t.v === "url" && urlCount >= MAX_URL ? " (máx. 2)" : ""}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          {buttons.map((b) => (
+            <div key={b.id} className="mt-4 rounded-lg bg-slate-50 p-5">
+              <h3 className="text-lg font-semibold text-slate-900">{BTN_TYPES.find((t) => t.v === b.type)?.l}</h3>
+              <div className="mt-3 flex items-end gap-4">
+                <div className="min-w-0 flex-1">
+                  <label className="mb-2 flex justify-between text-sm font-semibold text-slate-900"><span>Texto del botón<span className="text-red-500">*</span></span><span className="text-xs font-normal text-slate-500">{b.text.length}/25</span></label>
+                  <input value={b.text} maxLength={25} onChange={(e) => setButton(b.id, { text: e.target.value })} placeholder="Texto del botón" className={`${inputCls} ${tried && !b.text.trim() ? "!border-red-400" : ""}`} />
+                </div>
+                {b.type === "url" && (
+                  <div className="min-w-0 flex-1">
+                    <label className="mb-2 flex justify-between text-sm font-semibold text-slate-900"><span>Url del sitio web<span className="text-red-500">*</span></span><span className="text-xs font-normal text-slate-500">{b.url.length}/2000</span></label>
+                    <input value={b.url} maxLength={2000} onChange={(e) => setButton(b.id, { url: e.target.value })} placeholder="URL del botón" className={`${inputCls} ${tried && !validUrl(b.url) ? "!border-red-400" : ""}`} />
+                  </div>
+                )}
+                <button type="button" onClick={() => setButtons(buttons.filter((x) => x.id !== b.id))} aria-label="Quitar botón" className="mb-3 text-slate-700 hover:text-red-600"><Icon name="trash" size={22} /></button>
+              </div>
+              {tried && b.type === "url" && b.url && !validUrl(b.url) && <p role="alert" className="mt-1 text-sm text-red-600">La URL debe empezar con http:// o https://</p>}
+            </div>
+          ))}
+          {tried && btnErr && <p role="alert" className="mt-2 text-sm text-red-600">Completa el texto (y la URL) de cada botón.</p>}
           <Alert text={err} />
-          <div className="mt-8 flex gap-4">
-            <Link href="/settings/templates" className={btnOutline}>Cancelar</Link>
-            <button onClick={save} disabled={busy || !me} className={btnPrimary}>{busy ? "Guardando..." : "Guardar plantilla"}</button>
+          <div className="sticky bottom-0 -mx-6 mt-10 flex justify-end gap-4 border-t border-slate-100 bg-white/95 px-6 py-4 backdrop-blur md:-mx-10 md:px-10">
+            <Link href="/settings/templates" className={`${btnOutline} min-w-40`}>Cancelar</Link>
+            <button onClick={save} disabled={busy || !me} className={`${btnPrimary} min-w-40`}>{busy ? "Guardando..." : "Crear plantilla"}</button>
           </div>
         </div>
 
@@ -165,6 +216,11 @@ export function TemplateForm() {
                     {["image", "video", "document"].includes(headerType) && <div className="mb-1 flex h-24 items-center justify-center rounded bg-white/60 text-xs text-slate-500">{HEADERS.find((h) => h.v === headerType)?.l}</div>}
                     <p className="whitespace-pre-wrap break-words">{preview}</p>
                     {footer && <p className="mt-1 text-xs text-slate-500">{footer}</p>}
+                  </div>
+                )}
+                {buttons.length > 0 && (
+                  <div className="ml-auto mt-1 max-w-[90%] space-y-1">
+                    {buttons.map((b) => <div key={b.id} className="rounded-lg bg-white py-2 text-center text-sm font-medium text-sky-600 shadow-sm">{b.type === "url" ? "↗ " : "↩ "}{b.text || "Texto del botón"}</div>)}
                   </div>
                 )}
               </div>
