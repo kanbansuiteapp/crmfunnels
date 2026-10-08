@@ -8,7 +8,7 @@ export default async function GroupsPage() {
   const [{ data: me }, { data: groups }, { data: channels }] = await Promise.all([
     supabase.from("profiles").select("role").eq("id", auth.user?.id ?? "").maybeSingle(),
     supabase.from("wa_groups")
-      .select("id, name, origin, type, clicks, admins, participants, scheduled_messages, capacity, auto_capacity, invite_link, avatar_url, created_at, updated_at")
+      .select("id, name, origin, type, clicks, admins, participants, scheduled_messages, capacity, auto_capacity, invite_link, avatar_url, created_at, updated_at, last_synced_at")
       .order("created_at", { ascending: false }),
     supabase.from("channels").select("id, name, phone_number, status").order("created_at"),
   ]);

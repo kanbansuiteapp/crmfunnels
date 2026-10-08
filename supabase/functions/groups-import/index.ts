@@ -81,7 +81,7 @@ Deno.serve(async (req) => {
           type: kindOf(g), admins: parts.filter((p) => p.admin).length, participants: g.size ?? parts.length,
           invite_link: invite, avatar_url: g.pictureUrl ?? null,
           created_at: g.creation ? new Date(g.creation * 1000).toISOString() : new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(), last_synced_at: new Date().toISOString(),
         });
       }
       if (rows.length === 0) return json({ error: "No se encontraron los grupos seleccionados" }, 404);

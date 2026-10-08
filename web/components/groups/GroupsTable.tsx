@@ -8,15 +8,15 @@ import { ImportDialog, type Device } from "./ImportDialog";
 export type WaGroup = {
   id: string; name: string; origin: string; type: "group" | "community" | "channel";
   clicks: number; admins: number; participants: number; scheduled_messages: number;
-  capacity: number | null; auto_capacity: boolean; invite_link: string | null; avatar_url: string | null; created_at: string; updated_at: string;
+  capacity: number | null; auto_capacity: boolean; invite_link: string | null; avatar_url: string | null; created_at: string; updated_at: string; last_synced_at: string | null;
 };
 
-type ColKey = "origin" | "clicks" | "admins" | "participants" | "scheduled_messages" | "type" | "capacity" | "created_at" | "updated_at";
+type ColKey = "origin" | "clicks" | "admins" | "participants" | "scheduled_messages" | "type" | "capacity" | "created_at" | "updated_at" | "last_synced_at";
 const COLS: { key: ColKey; label: string }[] = [
   { key: "origin", label: "Origen" }, { key: "clicks", label: "Clicks" }, { key: "admins", label: "Admins" },
   { key: "participants", label: "Participantes" }, { key: "scheduled_messages", label: "Msg. programados" },
   { key: "type", label: "Tipo" }, { key: "capacity", label: "Capacidad" }, { key: "created_at", label: "Creado" },
-  { key: "updated_at", label: "Actualización" },
+  { key: "updated_at", label: "Actualización" }, { key: "last_synced_at", label: "Última sincronización" },
 ];
 const TYPES = { group: "Grupo", community: "Comunidad", channel: "Canal" } as const;
 const ORIGINS: Record<string, string> = { import: "Importado", created: "Creado" };
@@ -50,6 +50,18 @@ export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; d
   const [err, setErr] = useState<string | null>(null);
   const router = useRouter();
 
+  const [rowMenu, setRowMenu] = useState<string | null>(null);
+
+  async function remove(ids: string[]) {
+    if (!confirm(ids.length === 1 ? "¿Eliminar este registro de la lista?" : `¿Eliminar ${ids.length} registros de la lista?`)) return;
+    setErr(null);
+    const { error } = await createClient().rpc("delete_wa_groups", { p_ids: ids });
+    if (error) return setErr(error.message);
+    setPicked(new Set());
+    setRowMenu(null);
+    router.refresh();
+  }
+
   async function toggleCapacity(id: string, on: boolean) {
     setErr(null);
     const { error } = await createClient().rpc("set_group_capacity", { p_id: id, p_on: on });
@@ -59,7 +71,10 @@ export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; d
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const close = (e: MouseEvent) => box.current && !box.current.contains(e.target as Node) && setMenu(null);
+    const close = (e: MouseEvent) => {
+      if (box.current && !box.current.contains(e.target as Node)) setMenu(null);
+      if (!(e.target as HTMLElement).closest("[data-rowmenu]")) setRowMenu(null);
+    };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, []);
@@ -99,6 +114,7 @@ export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; d
         );
       case "created_at": return day(g.created_at);
       case "updated_at": return day(g.updated_at);
+      case "last_synced_at": return g.last_synced_at ? day(g.last_synced_at) : "—";
     }
   };
 
@@ -146,8 +162,14 @@ export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; d
       </div>
 
       {err && <p className="mb-3 text-sm text-red-600" role="alert">{err}</p>}
+      {isAdmin && picked.size > 0 && (
+        <div className="mb-3 flex items-center gap-4 text-sm">
+          <span>{picked.size} seleccionados</span>
+          <button onClick={() => remove([...picked])} className="rounded-full border px-4 py-1.5 text-red-600 hover:bg-red-50">Eliminar</button>
+        </div>
+      )}
       <div className="overflow-x-auto rounded-2xl border bg-white">
-        <table className="w-full min-w-[1100px] text-left text-sm">
+        <table className="w-full min-w-[1300px] text-left text-sm">
           <thead className="bg-slate-50">
             <tr>
               <th className="w-12 px-4 py-4">
@@ -162,11 +184,12 @@ export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; d
                     : c.label}
                 </th>
               ))}
+              <th className="w-12 px-4 py-4" />
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
-              <tr><td colSpan={visible.length + 2} className="px-4 py-16 text-center text-slate-500">
+              <tr><td colSpan={visible.length + 3} className="px-4 py-16 text-center text-slate-500">
                 {groups.length === 0 ? "Aún no hay grupos, comunidades ni canales." : "Ningún registro coincide con los filtros."}
               </td></tr>
             )}
@@ -191,6 +214,19 @@ export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; d
                   </div>
                 </td>
                 {visible.map((c) => <td key={c.key} className="whitespace-nowrap px-4 py-3 text-slate-600">{cell(g, c.key)}</td>)}
+                <td className="relative px-4 py-3 text-right" data-rowmenu>
+                  <button aria-label={`Acciones de ${g.name}`} aria-haspopup="menu" aria-expanded={rowMenu === g.id}
+                    onClick={() => setRowMenu(rowMenu === g.id ? null : g.id)} className="px-2 text-lg leading-none text-slate-500 hover:text-slate-900">···</button>
+                  {rowMenu === g.id && (
+                    <ul role="menu" className="absolute right-4 top-full z-20 w-44 rounded-xl border bg-white py-1 text-left text-sm shadow-lg">
+                      {g.invite_link && (
+                        <li><button role="menuitem" className="w-full px-4 py-2 text-left hover:bg-slate-50"
+                          onClick={() => { navigator.clipboard?.writeText(g.invite_link!); setRowMenu(null); }}>Copiar enlace</button></li>
+                      )}
+                      {isAdmin && <li><button role="menuitem" className="w-full px-4 py-2 text-left text-red-600 hover:bg-red-50" onClick={() => remove([g.id])}>Eliminar</button></li>}
+                    </ul>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

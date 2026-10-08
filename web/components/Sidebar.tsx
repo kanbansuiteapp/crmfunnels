@@ -45,6 +45,7 @@ export function Sidebar({ pipelineId }: { pipelineId: string | null }) {
       key: "1a1", icon: "chat", label: "Interacciones 1 a 1", title: "Interacciones 1 a 1",
       items: [
         { href: "/inbox", label: "Chat", icon: "💬" },
+        { href: "/group-messages", label: "Mensajes", icon: "✉️" },
         { href: "/contacts", label: "Contactos", icon: "👤" },
         ...(pipelineId ? [{ href: `/pipelines/${pipelineId}`, label: "Tableros", icon: "🗂️" }] : []),
         { href: "/whalinks", label: "Whalink", icon: "🔗" },
@@ -56,13 +57,7 @@ export function Sidebar({ pipelineId }: { pipelineId: string | null }) {
     { key: "apps", icon: "grid", label: "Aplicaciones", href: "/apps" },
     { key: "campaigns", icon: "megaphone", label: "Campañas", href: "/group-campaigns", divider: true },
     { key: "calendar", icon: "calendar", label: "Calendario", href: "/calendar" },
-    {
-      key: "groups", icon: "users", label: "Grupos y comunidades", title: "Grupos y comunidades",
-      items: [
-        { href: "/groups", label: "Grupos y comunidades", icon: "👥" },
-        { href: "/group-messages", label: "Mensajes", icon: "💬" },
-      ],
-    },
+    { key: "groups", icon: "users", label: "Grupos y comunidades", href: "/groups" },
     {
       key: "settings", icon: "settings", label: "Configuración", title: "Configuración", bottom: true,
       items: [{ href: "/team", label: "Equipo", icon: "👥" }],
