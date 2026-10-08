@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
@@ -21,11 +20,8 @@ export default async function PipelinePage({ params }: { params: { id: string } 
   if (!pipeline) notFound();
 
   return (
-    <main className="flex h-screen flex-col p-4">
-      <nav className="mb-3 flex items-center gap-4">
-        <h1 className="text-xl font-semibold">{pipeline.name}</h1>
-        <Link href="/inbox" className="text-sm text-sky-700 underline">Bandeja</Link>
-      </nav>
+    <main className="flex h-full flex-col p-4">
+      <h1 className="mb-4 text-xl font-semibold">{pipeline.name}</h1>
       <KanbanBoard
         pipelineId={pipeline.id}
         stages={(stages ?? []) as Stage[]}

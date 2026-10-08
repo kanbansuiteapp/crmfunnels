@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AddAgentForm } from "@/components/team/AddAgentForm";
@@ -13,10 +12,7 @@ export default async function TeamPage() {
 
   return (
     <main className="mx-auto max-w-2xl p-4">
-      <nav className="mb-4 flex items-center gap-4">
-        <h1 className="text-xl font-semibold">Equipo</h1>
-        <Link href="/inbox" className="text-sm text-sky-700 underline">Bandeja</Link>
-      </nav>
+      <h1 className="mb-4 text-xl font-semibold">Equipo</h1>
       <ul className="mb-6 divide-y rounded-xl border bg-white">
         {members?.map((m) => (
           <li key={m.id} className="flex items-center justify-between px-4 py-3 text-sm">

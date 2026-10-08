@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AgentsClient } from "@/components/agents/AgentsClient";
@@ -19,10 +18,7 @@ export default async function AgentsPage() {
 
   return (
     <main className="mx-auto max-w-5xl p-4">
-      <nav className="mb-4 flex items-center gap-4">
-        <h1 className="text-xl font-semibold">Agentes IA</h1>
-        <Link href="/inbox" className="text-sm text-sky-700 underline">Bandeja</Link>
-      </nav>
+      <h1 className="mb-4 text-xl font-semibold">Agentes IA</h1>
       {me.role !== "admin" && (
         <p className="mb-4 text-sm text-slate-500">Solo los administradores pueden editar los agentes.</p>
       )}

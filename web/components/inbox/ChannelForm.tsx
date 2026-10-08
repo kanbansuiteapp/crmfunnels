@@ -37,10 +37,10 @@ export function ChannelForm({ onCreated }: { onCreated: () => void }) {
   return (
     <form onSubmit={submit} className="flex max-w-sm flex-col gap-3 rounded-xl border bg-white p-5">
       <h2 className="font-semibold">Conectar canal (Evolution API)</h2>
-      <input required placeholder="Nombre" value={f.name} onChange={set("name")} className={input} />
-      <input placeholder="URL de Evolution" value={f.api_url} onChange={set("api_url")} className={input} />
-      <input placeholder="API key" type="password" value={f.api_key} onChange={set("api_key")} className={input} />
-      <input placeholder="Nombre de instancia" value={f.instance} onChange={set("instance")} className={input} />
+      <input required name="channel-name" autoComplete="off" placeholder="Nombre" value={f.name} onChange={set("name")} className={input} />
+      <input name="evo-url" type="url" autoComplete="off" placeholder="URL de Evolution (https://…)" value={f.api_url} onChange={set("api_url")} className={input} />
+      <input name="evo-key" type="password" autoComplete="new-password" placeholder="API key de la instancia" value={f.api_key} onChange={set("api_key")} className={input} />
+      <input name="evo-instance" autoComplete="off" placeholder="Nombre de instancia" value={f.instance} onChange={set("instance")} className={input} />
       {msg && <p className="text-sm text-red-600" role="alert">{msg}</p>}
       <button className="rounded bg-sky-600 px-3 py-2 text-sm font-medium text-white">Crear canal</button>
     </form>

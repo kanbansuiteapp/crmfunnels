@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { AutomationsClient } from "@/components/automations/AutomationsClient";
@@ -20,11 +19,7 @@ export default async function AutomationsPage() {
 
   return (
     <main className="mx-auto max-w-5xl p-4">
-      <nav className="mb-4 flex items-center gap-4">
-        <h1 className="text-xl font-semibold">Automatizaciones</h1>
-        <Link href="/inbox" className="text-sm text-sky-700 underline">Bandeja</Link>
-        <Link href="/team" className="text-sm text-sky-700 underline">Equipo</Link>
-      </nav>
+      <h1 className="mb-4 text-xl font-semibold">Automatizaciones</h1>
       <AutomationsClient
         automations={(automations ?? []) as unknown as Automation[]}
         runs={(runs ?? []) as unknown as Run[]}
