@@ -35,6 +35,14 @@ export function Sidebar({ pipelineId }: { pipelineId: string | null }) {
         { href: "/agents", label: "Agentes de IA", icon: "🤖" },
       ],
     },
+    {
+      key: "groups", icon: "🫂", label: "Grupos y comunidades", title: "Grupos y comunidades",
+      items: [
+        { href: "/groups", label: "Grupos y comunidades", icon: "👥" },
+        { href: "/group-campaigns", label: "Campañas", icon: "🔗" },
+        { href: "/group-messages", label: "Mensajes", icon: "💬" },
+      ],
+    },
     { key: "team", icon: "👥", label: "Equipo", href: "/team" },
   ];
 
