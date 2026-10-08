@@ -1,14 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Avatar } from "./Avatar";
 import type { ChannelRef, Conversation, Member } from "./types";
 
 type Tab = "all" | "mine" | "fav";
 type Status = "all" | "unread" | "open" | "closed";
-
-const AVATAR = ["#2a78d6", "#eb6834", "#1baf7a", "#8b5cf6", "#e87ba4", "#0f766e", "#b45309"];
-const colorOf = (s: string) => AVATAR[[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR.length];
-const initials = (n: string) => n.replace(/[^\p{L}\p{N} ]/gu, "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("") || "#";
 
 function when(iso: string) {
   const d = new Date(iso);
@@ -184,9 +181,7 @@ export function ConversationList({
           return (
             <li key={c.id} className={`group relative border-b ${selected === c.id ? "bg-indigo-50" : "hover:bg-slate-50"}`}>
               <button onClick={() => onSelect(c.id)} className="flex w-full items-start gap-3 px-4 py-3 text-left">
-                <span className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white" style={{ background: colorOf(name) }}>
-                  {initials(name)}
-                </span>
+                <span className="mt-0.5"><Avatar name={name} size={44} /></span>
                 <span className="min-w-0 flex-1">
                   <span className="flex items-baseline gap-1">
                     <span className="truncate text-sm font-semibold">{name}</span>
