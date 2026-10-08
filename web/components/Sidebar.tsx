@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 type Item = { href: string; label: string; icon: string };
-type Section = { key: string; icon: string; label: string; title?: string; href?: string; items?: Item[] };
+type Section = { key: string; icon: string; label: string; title?: string; href?: string; items?: Item[]; divider?: boolean };
 
 const STORAGE = "crm.panel.collapsed";
 
@@ -35,15 +35,15 @@ export function Sidebar({ pipelineId }: { pipelineId: string | null }) {
         { href: "/agents", label: "Agentes de IA", icon: "🤖" },
       ],
     },
+    { key: "campaigns", icon: "📣", label: "Campañas", href: "/group-campaigns", divider: true },
     {
-      key: "groups", icon: "🫂", label: "Grupos y comunidades", title: "Grupos y comunidades",
+      key: "groups", icon: "👥", label: "Grupos y comunidades", title: "Grupos y comunidades",
       items: [
         { href: "/groups", label: "Grupos y comunidades", icon: "👥" },
-        { href: "/group-campaigns", label: "Campañas", icon: "🔗" },
         { href: "/group-messages", label: "Mensajes", icon: "💬" },
       ],
     },
-    { key: "team", icon: "👥", label: "Equipo", href: "/team" },
+    { key: "team", icon: "🧑‍💼", label: "Equipo", href: "/team" },
   ];
 
   const on = (href: string) => pathname === href || pathname.startsWith(href + "/");
@@ -60,8 +60,9 @@ export function Sidebar({ pipelineId }: { pipelineId: string | null }) {
           {sections.map((s) => {
             const active = current?.key === s.key;
             return (
+              <div key={s.key} className="flex flex-col items-center gap-2">
+                {s.divider && <hr className="my-1 w-8 border-white/20" />}
               <Link
-                key={s.key}
                 href={entry(s)}
                 title={s.label}
                 aria-label={s.label}
@@ -73,6 +74,7 @@ export function Sidebar({ pipelineId }: { pipelineId: string | null }) {
               >
                 <span aria-hidden>{s.icon}</span>
               </Link>
+              </div>
             );
           })}
         </nav>
