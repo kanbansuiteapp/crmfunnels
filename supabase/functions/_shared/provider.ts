@@ -6,7 +6,7 @@ export async function sendText(ch: ChannelCreds, phone: string, text: string): P
   const r = await fetch(`${ch.api_url.replace(/\/$/, "")}/message/sendText/${ch.instance_name}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", apikey: ch.api_key },
-    body: JSON.stringify({ number: phone.replace(/\D/g, ""), text }),
+    body: JSON.stringify({ number: phone.includes("@") ? phone : phone.replace(/\D/g, ""), text }),
   });
   if (!r.ok) throw new Error(`proveedor respondió ${r.status}`);
 }

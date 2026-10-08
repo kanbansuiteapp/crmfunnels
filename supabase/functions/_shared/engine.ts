@@ -369,3 +369,43 @@ export async function runBroadcasts(db: Db): Promise<void> {
     }
   }
 }
+
+// ───────────── mensajes programados a grupos ─────────────
+// Envía los mensajes ya vencidos, como máximo 25 destinos por mensaje y por ronda (el resto sigue en la siguiente).
+export async function runGroupMessages(db: Db): Promise<void> {
+  const { data: due } = await db.from("group_messages").select("id, message, status")
+    .in("status", ["scheduled", "sending"]).lte("scheduled_at", new Date().toISOString()).order("scheduled_at").limit(5);
+
+  for (const m of due ?? []) {
+    if (m.status === "scheduled") {
+      const { data: claimed } = await db.from("group_messages").update({ status: "sending" }).eq("id", m.id).eq("status", "scheduled").select("id");
+      if (!claimed?.length) continue; // otra ejecución lo tomó
+    }
+    const { data: targets } = await db.from("group_message_targets")
+      .select("id, group:wa_groups(jid, channel:channels(api_url, api_key, instance_name))")
+      .eq("message_id", m.id).eq("status", "pending").limit(25);
+
+    for (const [i, t] of (targets ?? []).entries()) {
+      if (i > 0) await sleep(1500 + Math.round(Math.random() * 1500));
+      // si la cancelaron o borraron mientras tanto, se detiene
+      const { data: now } = await db.from("group_messages").select("status").eq("id", m.id).maybeSingle();
+      if (now?.status !== "sending") break;
+      try {
+        // deno-lint-ignore no-explicit-any
+        const g = t.group as any;
+        if (!g?.jid || !g?.channel) throw new Error("grupo o número no disponible");
+        await sendText(g.channel, g.jid, String(m.message));
+        await db.from("group_message_targets").update({ status: "sent", sent_at: new Date().toISOString() }).eq("id", t.id);
+      } catch (e) {
+        await db.from("group_message_targets").update({ status: "failed", error: String(e instanceof Error ? e.message : e).slice(0, 300) }).eq("id", t.id);
+      }
+    }
+
+    const count = async (status: string) =>
+      (await db.from("group_message_targets").select("id", { count: "exact", head: true }).eq("message_id", m.id).eq("status", status)).count ?? 0;
+    const [pending, sent, failed] = await Promise.all([count("pending"), count("sent"), count("failed")]);
+    await db.from("group_messages").update({
+      sent, failed, ...(pending === 0 ? { status: sent === 0 && failed > 0 ? "failed" : "done" } : {}),
+    }).eq("id", m.id).eq("status", "sending");
+  }
+}

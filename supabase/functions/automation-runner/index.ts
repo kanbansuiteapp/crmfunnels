@@ -1,6 +1,6 @@
 // Invocado por pg_cron cada minuto con el secreto de Vault en x-cron-secret
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { runBroadcasts, tick } from "../_shared/engine.ts";
+import { runBroadcasts, runGroupMessages, tick } from "../_shared/engine.ts";
 
 const safeEqual = (a: string, b: string) => {
   if (a.length !== b.length) return false;
@@ -17,7 +17,7 @@ Deno.serve(async (req) => {
   }
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   // el envío masivo puede durar hasta un minuto: se responde de inmediato y se trabaja en segundo plano
-  const work = Promise.allSettled([tick(admin, 50), runBroadcasts(admin)]);
+  const work = Promise.allSettled([tick(admin, 50), runBroadcasts(admin), runGroupMessages(admin)]);
   // @ts-ignore EdgeRuntime existe en el runtime de Supabase
   if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(work); else await work;
   return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json" } });

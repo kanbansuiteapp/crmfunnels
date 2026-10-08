@@ -56,7 +56,7 @@ export function Sidebar({ pipelineId }: { pipelineId: string | null }) {
     },
     { key: "apps", icon: "grid", label: "Aplicaciones", href: "/apps" },
     { key: "campaigns", icon: "megaphone", label: "Campañas", href: "/group-campaigns", divider: true },
-    { key: "calendar", icon: "calendar", label: "Calendario", href: "/calendar" },
+    { key: "calendar", icon: "calendar", label: "Mensajes programados", href: "/calendar" },
     { key: "groups", icon: "users", label: "Grupos y comunidades", href: "/groups" },
     {
       key: "settings", icon: "settings", label: "Configuración", title: "Configuración", bottom: true,
