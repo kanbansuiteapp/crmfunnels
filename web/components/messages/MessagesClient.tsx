@@ -26,6 +26,17 @@ const fmt = (iso: string) => {
   return `${d.toLocaleDateString("es", { day: "2-digit", month: "short", year: "numeric" }).replace(/\./g, "")}, ${d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
 };
 
+// iconos de línea de un solo color (mismos trazos que la barra de secciones)
+function LineIcon({ kind }: { kind: "calendar" | "list" }) {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      {kind === "calendar"
+        ? <><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></>
+        : <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />}
+    </svg>
+  );
+}
+
 function Ring({ value }: { value: number | null }) {
   if (value === null) return <span className="text-slate-500">—</span>;
   const r = 20, c = 2 * Math.PI * r;
@@ -207,7 +218,7 @@ export function MessagesClient({ items, isAdmin }: { items: GroupMessage[]; isAd
           {!calendar && <button onClick={() => setMenu(menu === "cols" ? null : "cols")} className="rounded-full border border-slate-300 bg-white px-5 py-3 text-base shadow-sm">▥ Columnas</button>}
           <button onClick={() => setMenu(menu === "filter" ? null : "filter")} className="rounded-full border border-slate-300 bg-white px-5 py-3 text-base shadow-sm">⏷ Filtrar</button>
           <button onClick={() => { setCalendar((v) => !v); setMenu(null); }} aria-label={calendar ? "Ver lista" : "Ver calendario"} title={calendar ? "Ver lista" : "Ver calendario"}
-            className="rounded-full border border-slate-300 bg-white px-4 py-3 text-base shadow-sm">{calendar ? "☰" : "🗓"}</button>
+            className="flex h-[50px] w-[50px] items-center justify-center rounded-full border border-slate-300 bg-white text-slate-800 shadow-sm hover:bg-slate-50"><LineIcon kind={calendar ? "list" : "calendar"} /></button>
           {menu === "cols" && !calendar && (
             <ul className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl border bg-white py-2 shadow-lg">
               {COLS.map((c) => (
