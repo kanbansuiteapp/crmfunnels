@@ -1,37 +1,37 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { CampaignsClient, type Campaign, type GroupLite } from "@/components/campaigns/CampaignsClient";
 
-const COLUMNS = ["Nombre", "Estado", "Destinatarios", "Fecha de envío", "Creado"];
+type RawGroup = {
+  id: string; name: string; type: GroupLite["type"]; participants: number; admins: number; capacity: number | null;
+  avatar_url: string | null; channel: { status: string } | null;
+};
+const lite = (g: RawGroup): GroupLite => ({
+  id: g.id, name: g.name, type: g.type, participants: g.participants, admins: g.admins, capacity: g.capacity, avatar_url: g.avatar_url,
+  connected: g.channel?.status === "connected" || g.channel?.status === "open",
+});
 
 export default async function CampaignsPage() {
   const supabase = createClient();
   const { data: auth } = await supabase.auth.getUser();
-  const { data: me } = await supabase.from("profiles").select("role").eq("id", auth.user?.id ?? "").maybeSingle();
+  const groupCols = "id, name, type, participants, admins, capacity, avatar_url, channel:channels(status)";
+  const [{ data: me }, { data: camps }, { data: groups }] = await Promise.all([
+    supabase.from("profiles").select("role").eq("id", auth.user?.id ?? "").maybeSingle(),
+    supabase.from("group_campaigns")
+      .select(`id, name, slug, type, clicks, links:group_campaign_groups(position, group:wa_groups(${groupCols}))`)
+      .order("created_at", { ascending: false }),
+    supabase.from("wa_groups").select(groupCols).order("name"),
+  ]);
   if (!me) redirect("/");
+
+  const campaigns: Campaign[] = ((camps ?? []) as unknown as (Omit<Campaign, "groups"> & { links: { position: number; group: RawGroup | null }[] })[]).map((c) => ({
+    id: c.id, name: c.name, slug: c.slug, type: c.type, clicks: c.clicks,
+    groups: [...c.links].sort((a, b) => a.position - b.position).flatMap((l) => (l.group ? [lite(l.group)] : [])),
+  }));
 
   return (
     <main className="p-4 md:p-5">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-slate-900">Campañas</h1>
-        <p className="text-base text-slate-600">0 registros en total</p>
-      </div>
-
-      <div className="scroll-x max-h-[calc(100vh-14rem)] rounded-2xl border border-slate-300 bg-white">
-        <table className="w-full min-w-[900px] text-left text-base text-slate-900">
-          <thead className="sticky top-0 z-10 bg-slate-100">
-            <tr>
-              {COLUMNS.map((c) => (
-                <th key={c} className="whitespace-nowrap px-5 py-4 text-sm font-semibold uppercase tracking-wide text-slate-700">{c}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td colSpan={COLUMNS.length} className="px-5 py-16 text-center text-base text-slate-600">Aún no hay campañas.</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <CampaignsClient campaigns={campaigns} available={((groups ?? []) as unknown as RawGroup[]).map(lite)} isAdmin={me.role === "admin"} />
     </main>
   );
 }
