@@ -48,12 +48,13 @@ Deno.serve(async (req) => {
   if (!me || me.role !== "admin") return json({ error: "Solo administradores" }, 403);
 
   const body = await req.json().catch(() => ({}));
-  const { data: ch } = await admin.from("channels").select("id, organization_id, api_url, api_key, instance_name")
+  const { data: ch } = await admin.from("channels").select("id, organization_id, api_url, api_key, instance_name, wa_type")
     .eq("id", String(body.channel_id ?? "")).eq("organization_id", me.organization_id).maybeSingle();
   if (!ch) return json({ error: "número no encontrado" }, 404);
 
   try {
     if (body.action === "list") {
+      if (ch.wa_type === "business" && body.type !== "group") return json({ items: [], note: "Los números de WhatsApp Business no tienen comunidades ni canales." });
       if (body.type === "channel") return json({ items: [], note: "La importación de canales aún no está disponible." });
       const want = body.type === "community" ? "community" : "group";
       const { data: have } = await admin.from("wa_groups").select("jid").eq("channel_id", ch.id);

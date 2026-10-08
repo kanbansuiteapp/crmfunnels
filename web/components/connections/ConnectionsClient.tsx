@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Icon } from "@/components/ui/Icon";
 import { Alert, btnOutline, btnPrimary, Field, inputCls, Modal, ModalActions, Notice, useMe } from "@/components/settings/kit";
 
-type Channel = { id: string; name: string; phone_number: string | null; provider: string; status: string; groups: number };
+type Channel = { id: string; name: string; phone_number: string | null; provider: string; status: string; wa_type: "messenger" | "business"; groups: number };
 type Overview = {
   plan_name: string; contacts: number; agents: number; devices: number;
   max_contacts: number | null; max_agents: number | null; max_devices: number | null; channels: Channel[];
@@ -49,7 +49,7 @@ const statusOf = (c: Channel) => (c.status === "connected" ? STATUS.connected : 
 // ── conectar: elegir tipo → QR (Messenger) o info de Meta (Business)
 function ConnectFlow({ channel, onClose, onConnected }: { channel: Channel; onClose: () => void; onConnected: () => void }) {
   const [step, setStep] = useState<"pick" | "qr" | "meta">("pick");
-  const [kind, setKind] = useState<"messenger" | "business" | null>(null);
+  const [kind, setKind] = useState<"messenger" | "business" | "api" | null>(null);
   const [qr, setQr] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -58,12 +58,12 @@ function ConnectFlow({ channel, onClose, onConnected }: { channel: Channel; onCl
 
   const getQr = useCallback(async () => {
     setLoading(true); setErr(null);
-    const r = await call({ action: "qr", channel_id: channel.id });
+    const r = await call({ action: "qr", channel_id: channel.id, wa_type: kind === "business" ? "business" : "messenger" });
     if (!alive.current) return;
     setLoading(false);
     if (r.error) return setErr(r.error);
     setQr(r.data.qr ?? null);
-  }, [channel.id]);
+  }, [channel.id, kind]);
 
   useEffect(() => {
     if (step !== "qr") return;
@@ -76,21 +76,23 @@ function ConnectFlow({ channel, onClose, onConnected }: { channel: Channel; onCl
     return () => { clearInterval(poll); clearInterval(refresh); };
   }, [step, channel.id, getQr, onConnected]);
 
-  const choice = (k: "messenger" | "business", title: string, g: string) => (
+  const choice = (k: "messenger" | "business" | "api", title: string, hint: string, g: string, color: string) => (
     <button onClick={() => setKind(k)} aria-pressed={kind === k}
-      className={`flex w-40 flex-col items-center gap-3 rounded-xl border p-4 text-sm font-semibold text-slate-700 ${kind === k ? "border-green-400 bg-green-50" : "border-slate-100 hover:border-slate-300"}`}>
-      <span className="flex h-20 w-20 items-center justify-center rounded-full bg-green-500 text-3xl font-bold text-white" aria-hidden>{g}</span>
+      className={`flex w-36 flex-col items-center gap-2 rounded-xl border p-4 text-center text-sm font-semibold text-slate-700 ${kind === k ? "border-green-400 bg-green-50" : "border-slate-100 hover:border-slate-300"}`}>
+      <span className={`flex h-16 w-16 items-center justify-center rounded-full text-2xl font-bold text-white ${color}`} aria-hidden>{g}</span>
       {title}
+      <span className="text-xs font-normal text-slate-500">{hint}</span>
     </button>
   );
 
   if (step === "pick") return (
-    <Modal title="Conectar número" description="Selecciona la opción que mejor se adapte a tus necesidades." onClose={onClose}>
+    <Modal title="Conectar número" description="Selecciona la opción que mejor se adapte a tus necesidades." onClose={onClose} wide>
       <div className="flex justify-center gap-5">
-        {choice("messenger", "WhatsApp Messenger", "✆")}
-        {choice("business", "WhatsApp Business", "B")}
+        {choice("messenger", "WhatsApp Messenger", "Con QR · grupos, comunidades y canales", "✆", "bg-green-500")}
+        {choice("business", "WhatsApp Business", "Con QR · solo grupos", "B", "bg-green-500")}
+        {choice("api", "WhatsApp Business API", "Con Meta", "∞", "bg-blue-500")}
       </div>
-      <ModalActions onCancel={onClose} onOk={() => setStep(kind === "messenger" ? "qr" : "meta")} okLabel="Continuar" disabled={!kind} />
+      <ModalActions onCancel={onClose} onOk={() => setStep(kind === "api" ? "meta" : "qr")} okLabel="Continuar" disabled={!kind} />
     </Modal>
   );
 
@@ -112,7 +114,7 @@ function ConnectFlow({ channel, onClose, onConnected }: { channel: Channel; onCl
   );
 
   return (
-    <Modal title="Escanea el código QR" description="En tu celular abre WhatsApp → Dispositivos vinculados → Vincular un dispositivo, y escanea este código." onClose={onClose}>
+    <Modal title="Escanea el código QR" description={`En tu celular abre ${kind === "business" ? "WhatsApp Business" : "WhatsApp"} → Dispositivos vinculados → Vincular un dispositivo, y escanea este código.`} onClose={onClose}>
       <div className="flex min-h-64 items-center justify-center">
         {loading && !qr ? <p className="text-slate-500">Generando código...</p>
           : qr ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={qr.startsWith("data:") ? qr : `data:image/png;base64,${qr}`} alt="Código QR de WhatsApp" className="h-64 w-64" />
@@ -235,6 +237,7 @@ export function ConnectionsClient() {
                     {isAdmin && <button onClick={() => setModal({ t: "rename", c })} aria-label={`Cambiar nombre de ${c.name}`} className="text-indigo-500"><Icon name="pencil" size={16} /></button>}
                   </p>
                   <p className="mt-1 text-sm text-indigo-600">{c.phone_number ?? "Sin registro"}</p>
+                  <p className="mt-1 text-xs text-slate-500">{c.provider === "meta" ? "WhatsApp Business API" : c.wa_type === "business" ? "WhatsApp Business" : "WhatsApp Messenger"}</p>
                   <p className="mt-6 text-sm text-slate-500">Estado</p>
                   <span className={`mt-1 rounded bg-slate-50 px-2 py-0.5 text-xs font-medium ${st.cls}`}>{st.label}</span>
                   <div className="mt-auto pt-6">

@@ -74,6 +74,9 @@ Deno.serve(async (req) => {
     if (!evoUrl || !evoKey) return json({ error: "Falta configurar la conexión con Evolution API (secretos EVOLUTION_API_URL y EVOLUTION_API_KEY)." }, 503);
 
     if (action === "qr") {
+      // Messenger (WhatsApp normal) o Business (app WhatsApp Business): ambos se vinculan por QR; cambia lo que el número puede hacer
+      const waType = body.wa_type === "business" ? "business" : "messenger";
+      await admin.from("channels").update({ wa_type: waType }).eq("id", ch.id);
       let instance = ch.instance_name as string | null;
       let token = ch.api_key as string | null;
       let qr: string | null = null;
