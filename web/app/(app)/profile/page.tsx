@@ -12,9 +12,9 @@ export default async function ProfilePage() {
   if (!me) redirect("/");
 
   return (
-    <main className="mx-auto max-w-3xl p-6">
-      <h1 className="text-2xl font-semibold">Configuración de perfil</h1>
-      <p className="mb-6 text-sm text-slate-500">Actualiza tus datos personales y configuraciones de tu cuenta.</p>
+    <main className="w-full p-6 md:px-10 md:py-8">
+      <h1 className="text-3xl font-semibold text-slate-900">Configuración de perfil</h1>
+      <p className="mb-8 mt-2 text-sm text-slate-500">Actualiza tus datos personales y configuraciones de tu cuenta.</p>
       <ProfileForm
         email={auth.user?.email ?? ""}
         role={me.role}
