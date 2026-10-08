@@ -301,7 +301,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // para no disparar los filtros anti-spam de WhatsApp. Se llama una vez por minuto.
 export async function runBroadcasts(db: Db): Promise<void> {
   const { data: bcs } = await db.from("broadcasts")
-    .select("id, organization_id, channel_id, message, per_minute").eq("status", "sending");
+    .select("id, organization_id, channel_id, message, per_minute").eq("status", "sending")
+    .or(`scheduled_at.is.null,scheduled_at.lte.${new Date().toISOString()}`);
 
   for (const b of bcs ?? []) {
     const { data: recipients } = await db.rpc("claim_broadcast_recipients", { p_broadcast: b.id, p_limit: b.per_minute });

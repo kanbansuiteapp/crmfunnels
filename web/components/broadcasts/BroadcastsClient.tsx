@@ -1,33 +1,52 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export type Broadcast = {
   id: string; name: string; message: string; status: "draft" | "sending" | "done" | "cancelled";
-  per_minute: number; total: number; sent: number; failed: number; created_at: string;
+  per_minute: number; total: number; sent: number; failed: number; created_at: string; started_at: string | null; scheduled_at: string | null;
   channel: { name: string } | null; tag: { name: string } | null;
 };
 
-const STATUS: Record<Broadcast["status"], { label: string; cls: string }> = {
+type StateKey = "scheduled" | "draft" | "sending" | "done" | "partial" | "failed" | "cancelled";
+
+const STATE: Record<StateKey, { label: string; cls: string }> = {
+  scheduled: { label: "Programado", cls: "bg-indigo-100 text-indigo-700" },
   draft: { label: "Borrador", cls: "bg-slate-100 text-slate-700" },
   sending: { label: "Enviando", cls: "bg-amber-100 text-amber-800" },
-  done: { label: "Completada", cls: "bg-emerald-100 text-emerald-800" },
-  cancelled: { label: "Cancelada", cls: "bg-red-100 text-red-800" },
+  done: { label: "Finalizado", cls: "bg-green-100 text-green-700" },
+  partial: { label: "Parcialmente fallido", cls: "bg-red-100 text-red-700" },
+  failed: { label: "Fallida", cls: "bg-red-100 text-red-700" },
+  cancelled: { label: "Cancelada", cls: "bg-slate-200 text-slate-700" },
 };
 
-export function BroadcastsClient({
-  items, channels, tags, isAdmin,
-}: {
-  items: Broadcast[]; channels: { id: string; name: string }[]; tags: { id: string; name: string }[]; isAdmin: boolean;
-}) {
-  const router = useRouter();
-  const [f, setF] = useState({ name: "", channel: channels[0]?.id ?? "", message: "", tag: "", perMinute: 6 });
-  const [msg, setMsg] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+function stateOf(b: Broadcast): StateKey {
+  if (b.status === "sending" && b.scheduled_at && new Date(b.scheduled_at) > new Date()) return "scheduled";
+  if (b.status === "done" && b.failed > 0) return b.sent > 0 ? "partial" : "failed";
+  return b.status;
+}
 
-  // mientras hay campañas enviándose, se refresca el progreso
+const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+function fmt(iso: string) {
+  const d = new Date(iso);
+  const date = d.toLocaleDateString("es", { day: "2-digit", month: "short", year: "numeric" }).replace(/\./g, "");
+  return `${date}, ${d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
+}
+
+export function BroadcastsClient({ items, isAdmin }: { items: Broadcast[]; isAdmin: boolean }) {
+  const router = useRouter();
+  const [q, setQ] = useState("");
+  const [status, setStatus] = useState<StateKey | "">("");
+  const [channel, setChannel] = useState("");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const filterBox = useRef<HTMLDivElement>(null);
+
+  // mientras hay envíos en curso, se refresca el progreso
   const active = items.some((b) => b.status === "sending");
   useEffect(() => {
     if (!active) return;
@@ -35,22 +54,26 @@ export function BroadcastsClient({
     return () => clearInterval(t);
   }, [active, router]);
 
+  useEffect(() => {
+    const close = (e: MouseEvent) => filterBox.current && !filterBox.current.contains(e.target as Node) && setFilterOpen(false);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+
+  const rows = useMemo(() => {
+    const s = norm(q.trim());
+    return items.filter((b) =>
+      (!s || norm(b.name).includes(s)) && (!status || stateOf(b) === status) && (!channel || b.channel?.name === channel));
+  }, [items, q, status, channel]);
+
+  const hasFilters = !!(q || status || channel);
+  const channelNames = [...new Set(items.map((b) => b.channel?.name).filter(Boolean))] as string[];
+
   async function call(fn: string, args: Record<string, unknown>) {
     const { data, error } = await createClient().rpc(fn, args);
     if (error) setMsg(error.message);
     else router.refresh();
     return { data, error };
-  }
-
-  async function create(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setMsg(null);
-    const { error } = await call("create_broadcast", {
-      p_name: f.name, p_channel: f.channel, p_message: f.message, p_tag: f.tag || null, p_per_minute: f.perMinute,
-    });
-    setBusy(false);
-    if (!error) setF({ ...f, name: "", message: "" });
   }
 
   function start(b: Broadcast) {
@@ -62,81 +85,98 @@ export function BroadcastsClient({
 
   const input = "w-full rounded-lg border px-3 py-2 text-sm";
   return (
-    <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
-      {isAdmin && (
-        <form onSubmit={create} className="h-fit space-y-3 rounded-xl border bg-white p-5">
-          <h2 className="font-semibold">Nueva campaña</h2>
-          <input required placeholder="Nombre interno" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className={input} />
-          <select aria-label="Canal" value={f.channel} onChange={(e) => setF({ ...f, channel: e.target.value })} className={input}>
-            {channels.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-          <select aria-label="Audiencia" value={f.tag} onChange={(e) => setF({ ...f, tag: e.target.value })} className={input}>
-            <option value="">Todos los contactos</option>
-            {tags.map((t) => <option key={t.id} value={t.id}>Etiqueta: {t.name}</option>)}
-          </select>
-          <textarea required rows={5} maxLength={1000} placeholder="Mensaje. Puedes usar {{name}} para el nombre."
-            value={f.message} onChange={(e) => setF({ ...f, message: e.target.value })} className={input} />
-          <label className="block text-xs text-slate-600">
-            Velocidad
-            <select value={f.perMinute} onChange={(e) => setF({ ...f, perMinute: Number(e.target.value) })} className={`${input} mt-1`}>
-              <option value={3}>3 por minuto (muy seguro)</option>
-              <option value={6}>6 por minuto (recomendado)</option>
-              <option value={12}>12 por minuto</option>
-              <option value={20}>20 por minuto (riesgo alto)</option>
-            </select>
-          </label>
-          <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
-            WhatsApp puede bloquear números que envían mensajes masivos a quien no los espera. Escribe solo a contactos
-            que te han escrito antes. Quien responda <b>STOP</b>, <b>baja</b> o <b>cancelar</b> queda excluido de futuros envíos.
-          </p>
-          <button disabled={busy || channels.length === 0} className="w-full rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
-            Crear borrador
-          </button>
-          <p className="text-xs text-slate-500">La lista de destinatarios se fija al crear el borrador. No se envía nada hasta que pulses "Iniciar".</p>
-        </form>
-      )}
+    <div>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Envíos masivos a contactos</h1>
+          <p className="text-sm text-slate-500">Envía mensajes a todos tus contactos de forma segmentada.</p>
+        </div>
+        {isAdmin && (
+          <Link href="/broadcasts/new"
+            className="shrink-0 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700">
+            + Crear envío masivo
+          </Link>
+        )}
+      </div>
 
-      <section className={isAdmin ? "" : "lg:col-span-2"}>
-        {msg && <p className="mb-3 text-sm text-red-600" role="alert">{msg}</p>}
-        <ul className="space-y-3">
-          {items.length === 0 && <li className="rounded-xl border bg-white p-6 text-sm text-slate-500">Aún no hay campañas.</li>}
-          {items.map((b) => {
-            const done = b.sent + b.failed;
-            const pct = b.total ? Math.round((done / b.total) * 100) : 0;
-            return (
-              <li key={b.id} className="rounded-xl border bg-white p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="font-medium">{b.name}</p>
-                    <p className="text-xs text-slate-500">
-                      {b.channel?.name} · {b.tag ? `etiqueta ${b.tag.name}` : "todos los contactos"} · {b.per_minute}/min
-                    </p>
-                  </div>
-                  <span className={`shrink-0 rounded px-2 py-0.5 text-xs ${STATUS[b.status].cls}`}>{STATUS[b.status].label}</span>
-                </div>
-                <p className="mt-2 line-clamp-2 text-sm text-slate-600">“{b.message}”</p>
-                <div className="mt-3" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`Progreso de ${b.name}`}>
-                  <div className="h-2 rounded bg-slate-100">
-                    <div className="h-2 rounded bg-sky-600" style={{ width: `${pct}%` }} />
-                  </div>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {b.sent} enviados · {b.failed} fallidos · {b.total} destinatarios
-                  </p>
-                </div>
-                {isAdmin && (b.status === "draft" || b.status === "sending") && (
-                  <div className="mt-3 flex gap-2">
-                    {b.status === "draft" && (
-                      <button onClick={() => start(b)} className="rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white">Iniciar envío</button>
-                    )}
-                    <button onClick={() => confirm("¿Cancelar esta campaña?") && call("cancel_broadcast", { p_id: b.id })}
-                      className="rounded-lg border px-3 py-1.5 text-xs">Cancelar</button>
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </section>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <input type="search" aria-label="Buscar por nombre" placeholder="Buscar por nombre" value={q}
+          onChange={(e) => setQ(e.target.value)} className="w-full max-w-xs rounded-lg border bg-white px-3 py-2 text-sm" />
+        <div className="relative flex items-center gap-3" ref={filterBox}>
+          {hasFilters && (
+            <button onClick={() => { setQ(""); setStatus(""); setChannel(""); }}
+              className="text-sm font-medium text-indigo-600 hover:underline">Limpiar todos los filtros</button>
+          )}
+          <button onClick={() => setFilterOpen((v) => !v)} aria-expanded={filterOpen}
+            className="rounded-lg border bg-white px-4 py-2 text-sm hover:bg-slate-50">Filtrar</button>
+          {filterOpen && (
+            <div className="absolute right-0 top-full z-20 mt-2 w-64 space-y-3 rounded-xl border bg-white p-4 shadow-lg">
+              <label className="block text-xs text-slate-600">Estado
+                <select value={status} onChange={(e) => setStatus(e.target.value as StateKey | "")} className={`${input} mt-1`}>
+                  <option value="">Todos</option>
+                  {(Object.keys(STATE) as StateKey[]).map((k) => <option key={k} value={k}>{STATE[k].label}</option>)}
+                </select>
+              </label>
+              <label className="block text-xs text-slate-600">Dispositivo
+                <select value={channel} onChange={(e) => setChannel(e.target.value)} className={`${input} mt-1`}>
+                  <option value="">Todos</option>
+                  {channelNames.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {msg && <p className="mb-3 text-sm text-red-600" role="alert">{msg}</p>}
+
+      <div className="overflow-x-auto rounded-xl border bg-white">
+        <table className="w-full min-w-[720px] text-left text-sm">
+          <thead>
+            <tr className="border-b text-slate-800">
+              <th className="px-4 py-3 font-semibold">Nombre</th>
+              <th className="px-4 py-3 font-semibold">Dispositivo</th>
+              <th className="px-4 py-3 font-semibold">Fecha para envío</th>
+              <th className="px-4 py-3 font-semibold">Contactos</th>
+              <th className="px-4 py-3 font-semibold">Estado</th>
+              {isAdmin && <th className="px-4 py-3" />}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={isAdmin ? 6 : 5} className="px-4 py-12 text-center text-slate-500">
+                  {items.length === 0 ? "Aún no hay envíos masivos." : "Ningún envío coincide con los filtros."}
+                </td>
+              </tr>
+            )}
+            {rows.map((b) => {
+              const st = STATE[stateOf(b)];
+              return (
+                <tr key={b.id} className="border-b last:border-0 text-slate-600">
+                  <td className="max-w-[260px] truncate px-4 py-4 font-medium" title={b.name}>{b.name}</td>
+                  <td className="px-4 py-4"><span className="mr-2 inline-block h-2 w-2 rounded-full bg-green-500" />{b.channel?.name}</td>
+                  <td className="px-4 py-4">{fmt(b.scheduled_at ?? b.started_at ?? b.created_at)}</td>
+                  <td className="px-4 py-4">{b.total}</td>
+                  <td className="px-4 py-4"><span className={`rounded px-2 py-0.5 text-xs font-medium ${st.cls}`}>{st.label}</span></td>
+                  {isAdmin && (
+                    <td className="whitespace-nowrap px-4 py-4 text-right">
+                      {b.status === "draft" && (
+                        <button onClick={() => start(b)} className="mr-2 rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white">Iniciar</button>
+                      )}
+                      {(b.status === "draft" || b.status === "sending") && (
+                        <button onClick={() => confirm("¿Cancelar este envío?") && call("cancel_broadcast", { p_id: b.id })}
+                          className="rounded-lg border px-3 py-1 text-xs">Cancelar</button>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
     </div>
   );
 }

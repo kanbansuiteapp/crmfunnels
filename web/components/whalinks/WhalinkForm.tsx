@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 export type DeviceOption = { id: string; name: string; phone: string };
 export type WhalinkValues = { id: string; name: string; message: string; tag_name: string | null; channel_id: string };
 
-function PhonePreview({ device, message }: { device?: DeviceOption; message: string }) {
+export function PhonePreview({ device, message }: { device?: DeviceOption; message: string }) {
   return (
     <div className="mx-auto w-[300px] rounded-[36px] border-[6px] border-white bg-white shadow-xl" aria-label="Vista previa en WhatsApp" role="img">
       <div className="overflow-hidden rounded-[30px]">
