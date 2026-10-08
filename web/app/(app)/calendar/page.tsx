@@ -8,7 +8,7 @@ export default async function ScheduledMessagesPage() {
   const [{ data: me }, { data: items }] = await Promise.all([
     supabase.from("profiles").select("role").eq("id", auth.user?.id ?? "").maybeSingle(),
     supabase.from("group_messages")
-      .select("id, name, message, scheduled_at, status, total, sent, failed, read_rate, targets:group_message_targets(status, error, group:wa_groups(name))")
+      .select("id, name, message, scheduled_at, status, total, sent, failed, read_rate, blocks, targets:group_message_targets(status, error, group:wa_groups(name))")
       .order("scheduled_at", { ascending: false }).limit(300),
   ]);
   if (!me) redirect("/");

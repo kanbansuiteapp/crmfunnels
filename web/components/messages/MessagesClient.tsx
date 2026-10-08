@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 
 type St = "scheduled" | "sending" | "done" | "failed" | "cancelled";
 export type GroupMessage = {
-  id: string; name: string; message: string; scheduled_at: string; status: St; total: number; sent: number; failed: number; read_rate: number | null;
+  id: string; name: string; message: string; scheduled_at: string; status: St; total: number; sent: number; failed: number; read_rate: number | null; blocks: { type: string; text?: string; media_name?: string; poll?: { question: string }; contact?: { name: string } }[];
   targets: { status: string; error: string | null; group: { name: string } | null }[];
 };
 
@@ -212,7 +212,13 @@ export function MessagesClient({ items, isAdmin }: { items: GroupMessage[]; isAd
               <div><h2 className="text-xl font-semibold">{view.name}</h2><p className="text-sm text-slate-600">{fmt(view.scheduled_at)} · {STATUS[view.status].label}</p></div>
               <button onClick={() => setView(null)} aria-label="Cerrar">✕</button>
             </div>
-            <p className="mb-5 whitespace-pre-wrap rounded-xl bg-slate-100 px-4 py-3 text-base">{view.message}</p>
+            <ul className="mb-5 space-y-2">
+              {(view.blocks?.length ? view.blocks : [{ type: "text", text: view.message }]).map((b, i) => (
+                <li key={i} className="whitespace-pre-wrap rounded-xl bg-slate-100 px-4 py-3 text-base">
+                  {b.type === "poll" ? `📋 ${b.poll?.question ?? ""}` : b.type === "contact" ? `👤 ${b.contact?.name ?? ""}` : [b.media_name && `📎 ${b.media_name}`, b.text].filter(Boolean).join("\n") || `[${b.type}]`}
+                </li>
+              ))}
+            </ul>
             <p className="mb-2 text-sm font-semibold">Destinos · {view.sent} enviados · {view.failed} fallidos · {view.total} en total</p>
             <ul className="space-y-1.5">
               {view.targets.map((t, i) => (

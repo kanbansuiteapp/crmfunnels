@@ -1,12 +1,15 @@
 // Envío de texto por Evolution API
 export type ChannelCreds = { api_url: string | null; api_key: string | null; instance_name: string | null };
 
-export async function sendText(ch: ChannelCreds, phone: string, text: string): Promise<void> {
+// `phone` puede ser un teléfono o el identificador de un grupo ("...@g.us")
+const toNumber = (phone: string) => (phone.includes("@") ? phone : phone.replace(/\D/g, ""));
+
+export async function sendText(ch: ChannelCreds, phone: string, text: string, opts: { mentionAll?: boolean } = {}): Promise<void> {
   if (!ch.api_url || !ch.api_key || !ch.instance_name) throw new Error("canal sin credenciales");
   const r = await fetch(`${ch.api_url.replace(/\/$/, "")}/message/sendText/${ch.instance_name}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", apikey: ch.api_key },
-    body: JSON.stringify({ number: phone.includes("@") ? phone : phone.replace(/\D/g, ""), text }),
+    body: JSON.stringify({ number: toNumber(phone), text, ...(opts.mentionAll ? { mentionsEveryOne: true } : {}) }),
   });
   if (!r.ok) throw new Error(`proveedor respondió ${r.status}`);
 }
@@ -38,7 +41,7 @@ export async function sendMedia(
 ): Promise<void> {
   if (!ch.api_url || !ch.api_key || !ch.instance_name) throw new Error("canal sin credenciales");
   const base = `${ch.api_url.replace(/\/$/, "")}/message`;
-  const number = phone.replace(/\D/g, "");
+  const number = toNumber(phone);
   const isAudio = m.type === "audio";
   const r = await fetch(`${base}/${isAudio ? "sendWhatsAppAudio" : "sendMedia"}/${ch.instance_name}`, {
     method: "POST",
@@ -69,4 +72,29 @@ export async function fetchIncomingMedia(
   const j = await r.json();
   if (!j?.base64) throw new Error("el proveedor no devolvió el archivo");
   return { bytes: fromBase64(j.base64), mime: j.mimetype ?? inlineMime ?? "application/octet-stream", name: j.fileName };
+}
+
+// Encuesta (Evolution API)
+export async function sendPoll(ch: ChannelCreds, phone: string, poll: { question: string; options: string[]; multiple: boolean }): Promise<void> {
+  if (!ch.api_url || !ch.api_key || !ch.instance_name) throw new Error("canal sin credenciales");
+  const r = await fetch(`${ch.api_url.replace(/\/$/, "")}/message/sendPoll/${ch.instance_name}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: ch.api_key },
+    body: JSON.stringify({ number: toNumber(phone), name: poll.question, selectableCount: poll.multiple ? poll.options.length : 1, values: poll.options }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!r.ok) throw new Error(`proveedor respondió ${r.status}`);
+}
+
+// Tarjeta de contacto (Evolution API)
+export async function sendContact(ch: ChannelCreds, phone: string, contact: { name: string; phone: string }): Promise<void> {
+  if (!ch.api_url || !ch.api_key || !ch.instance_name) throw new Error("canal sin credenciales");
+  const digits = contact.phone.replace(/\D/g, "");
+  const r = await fetch(`${ch.api_url.replace(/\/$/, "")}/message/sendContact/${ch.instance_name}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: ch.api_key },
+    body: JSON.stringify({ number: toNumber(phone), contact: [{ fullName: contact.name, wuid: digits, phoneNumber: `+${digits}` }] }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (!r.ok) throw new Error(`proveedor respondió ${r.status}`);
 }

@@ -1,7 +1,7 @@
 // Motor de automatizaciones: procesa la cola de eventos y reanuda runs en espera.
 // deno-lint-ignore-file no-explicit-any
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { mediaTypeOf, sendMedia, sendText, toBase64 } from "./provider.ts";
+import { mediaTypeOf, sendContact, sendMedia, sendPoll, sendText, toBase64 } from "./provider.ts";
 
 type Step = { type: string; config?: Record<string, any>; then?: Step[]; else?: Step[] };
 type Db = SupabaseClient;
@@ -371,30 +371,80 @@ export async function runBroadcasts(db: Db): Promise<void> {
 }
 
 // ───────────── mensajes programados a grupos ─────────────
-// Envía los mensajes ya vencidos, como máximo 25 destinos por mensaje y por ronda (el resto sigue en la siguiente).
+type Block = {
+  type: "text" | "audio" | "document" | "media" | "link" | "poll" | "contact" | "event";
+  text?: string; media_path?: string; media_name?: string; media_mime?: string; mention_all?: boolean;
+  poll?: { question: string; options: string[]; multiple?: boolean }; contact?: { name: string; phone: string };
+};
+type Loaded = { bytes: Uint8Array; mime: string; name: string; type: ReturnType<typeof mediaTypeOf> };
+
+// Próxima fecha de una repetición; si ya quedó atrás, avanza hasta una fecha futura
+function nextRun(from: string, freq: string): Date {
+  const d = new Date(from);
+  const step = () => {
+    if (freq === "weekly") d.setUTCDate(d.getUTCDate() + 7);
+    else if (freq === "monthly") d.setUTCMonth(d.getUTCMonth() + 1);
+    else d.setUTCDate(d.getUTCDate() + 1);
+  };
+  step();
+  while (d.getTime() <= Date.now()) step();
+  return d;
+}
+
+// Envía los mensajes vencidos. Cada ronda (1 minuto) trabaja hasta ~90 s; lo que falte sigue en la siguiente.
 export async function runGroupMessages(db: Db): Promise<void> {
-  const { data: due } = await db.from("group_messages").select("id, message, status")
+  const started = Date.now();
+  const { data: due } = await db.from("group_messages").select("*")
     .in("status", ["scheduled", "sending"]).lte("scheduled_at", new Date().toISOString()).order("scheduled_at").limit(5);
 
   for (const m of due ?? []) {
+    if (Date.now() - started > 80_000) break;
     if (m.status === "scheduled") {
       const { data: claimed } = await db.from("group_messages").update({ status: "sending" }).eq("id", m.id).eq("status", "scheduled").select("id");
       if (!claimed?.length) continue; // otra ejecución lo tomó
+      await db.rpc("refresh_group_message_targets", { p_id: m.id });
     }
+
+    const blocks = (Array.isArray(m.blocks) && m.blocks.length ? m.blocks : [{ type: "text", text: m.message }]) as Block[];
+    // archivos: una sola descarga por mensaje y ronda
+    const files = new Map<string, Loaded>();
+    let fileError: string | null = null;
+    for (const b of blocks) {
+      if (!b.media_path || files.has(b.media_path)) continue;
+      const path = String(b.media_path);
+      const dl = path.startsWith(`${m.organization_id}/group-messages/`) ? await db.storage.from("chat-media").download(path) : null;
+      if (!dl || dl.error || !dl.data || dl.data.size > 16 * 1024 * 1024) { fileError = "archivo adjunto no disponible"; break; }
+      const mime = (dl.data.type || String(b.media_mime ?? "application/octet-stream")).split(";")[0];
+      files.set(path, { bytes: new Uint8Array(await dl.data.arrayBuffer()), mime, name: String(b.media_name ?? "archivo").slice(0, 120), type: mediaTypeOf(mime) });
+    }
+
     const { data: targets } = await db.from("group_message_targets")
       .select("id, group:wa_groups(jid, channel:channels(api_url, api_key, instance_name))")
-      .eq("message_id", m.id).eq("status", "pending").limit(25);
+      .eq("message_id", m.id).eq("status", "pending").limit(200);
 
-    for (const [i, t] of (targets ?? []).entries()) {
-      if (i > 0) await sleep(1500 + Math.round(Math.random() * 1500));
+    let first = true;
+    for (const t of targets ?? []) {
+      if (Date.now() - started > 90_000) break;
+      if (!first) await sleep(m.speed === "slow" ? 10_000 + Math.round(Math.random() * 5_000) : 3_000);
+      first = false;
       // si la cancelaron o borraron mientras tanto, se detiene
       const { data: now } = await db.from("group_messages").select("status").eq("id", m.id).maybeSingle();
       if (now?.status !== "sending") break;
       try {
+        if (fileError) throw new Error(fileError);
         // deno-lint-ignore no-explicit-any
         const g = t.group as any;
         if (!g?.jid || !g?.channel) throw new Error("grupo o número no disponible");
-        await sendText(g.channel, g.jid, String(m.message));
+        for (const [i, b] of blocks.entries()) {
+          if (i > 0) await sleep(1_200);
+          const text = String(b.text ?? "");
+          if (b.type === "poll" && b.poll) await sendPoll(g.channel, g.jid, { question: b.poll.question, options: b.poll.options, multiple: !!b.poll.multiple });
+          else if (b.type === "contact" && b.contact) await sendContact(g.channel, g.jid, b.contact);
+          else if (b.media_path) {
+            const f = files.get(String(b.media_path))!;
+            await sendMedia(g.channel, g.jid, { type: f.type, mime: f.mime, name: f.name, base64: toBase64(f.bytes), caption: f.type === "audio" ? "" : text });
+          } else await sendText(g.channel, g.jid, text, { mentionAll: !!b.mention_all });
+        }
         await db.from("group_message_targets").update({ status: "sent", sent_at: new Date().toISOString() }).eq("id", t.id);
       } catch (e) {
         await db.from("group_message_targets").update({ status: "failed", error: String(e instanceof Error ? e.message : e).slice(0, 300) }).eq("id", t.id);
@@ -404,8 +454,23 @@ export async function runGroupMessages(db: Db): Promise<void> {
     const count = async (status: string) =>
       (await db.from("group_message_targets").select("id", { count: "exact", head: true }).eq("message_id", m.id).eq("status", status)).count ?? 0;
     const [pending, sent, failed] = await Promise.all([count("pending"), count("sent"), count("failed")]);
-    await db.from("group_messages").update({
-      sent, failed, ...(pending === 0 ? { status: sent === 0 && failed > 0 ? "failed" : "done" } : {}),
-    }).eq("id", m.id).eq("status", "sending");
+    if (pending > 0) { await db.from("group_messages").update({ sent, failed }).eq("id", m.id).eq("status", "sending"); continue; }
+
+    // terminó esta vuelta: ¿se repite?
+    const runs = (m.runs_done ?? 0) + 1;
+    let again = false;
+    let next: Date | null = null;
+    if (m.repeat_enabled) {
+      next = nextRun(m.scheduled_at, m.repeat_frequency);
+      again = m.repeat_end === "never"
+        || (m.repeat_end === "after" && runs < (m.repeat_after ?? 1))
+        || (m.repeat_end === "date" && !!m.repeat_until && next.getTime() <= new Date(m.repeat_until).getTime());
+    }
+    if (again && next) {
+      await db.from("group_message_targets").update({ status: "pending", error: null, sent_at: null }).eq("message_id", m.id);
+      await db.from("group_messages").update({ status: "scheduled", scheduled_at: next.toISOString(), runs_done: runs, sent: 0, failed: 0 }).eq("id", m.id).eq("status", "sending");
+    } else {
+      await db.from("group_messages").update({ sent, failed, runs_done: runs, status: sent === 0 && failed > 0 ? "failed" : "done" }).eq("id", m.id).eq("status", "sending");
+    }
   }
 }
