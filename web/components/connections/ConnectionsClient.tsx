@@ -158,6 +158,17 @@ export function ConnectionsClient() {
     setOv(data as Overview);
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // al abrir, el administrador sincroniza el estado real de cada número con Evolution (una sola vez)
+  const synced = useRef(false);
+  useEffect(() => {
+    if (!isAdmin || !ov || synced.current) return;
+    synced.current = true;
+    (async () => {
+      const results = await Promise.all(ov.channels.map((c) => call({ action: "status", channel_id: c.id })));
+      if (results.some((r, i) => r.data && (r.data.status === "connected") !== (ov.channels[i].status === "connected"))) load();
+    })();
+  }, [isAdmin, ov, load]);
   useEffect(() => {
     const close = () => setMenu(null);
     document.addEventListener("click", close);

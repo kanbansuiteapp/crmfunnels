@@ -98,7 +98,9 @@ Deno.serve(async (req) => {
 
     if (action === "status") {
       if (!ch.instance_name) return json({ ok: true, status: "disconnected", phone: null });
-      const s = await evo("GET", `/instance/connectionState/${ch.instance_name}`, ch.api_key!);
+      let s = await evo("GET", `/instance/connectionState/${ch.instance_name}`, ch.api_key ?? evoKey);
+      if (!s.ok) s = await evo("GET", `/instance/connectionState/${ch.instance_name}`, evoKey); // la llave guardada pudo cambiar
+      if (!s.ok) return json({ error: `Evolution respondió ${s.status} al consultar el estado` }, 502);
       const state = s.data?.instance?.state ?? s.data?.state;
       if (state === "open") {
         let phone = ch.phone_number as string | null;
