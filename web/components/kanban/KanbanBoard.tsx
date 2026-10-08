@@ -16,6 +16,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 import { createClient } from "@/lib/supabase/client";
 import { Column } from "./Column";
 import { DealCardView } from "./DealCard";
+import { NewDealForm } from "./NewDealForm";
 import type { Agent, Deal, Stage } from "./types";
 
 type Props = {
@@ -35,10 +36,19 @@ export function KanbanBoard({ pipelineId, stages, initialDeals, agents }: Props)
   const [activeId, setActiveId] = useState<string | null>(null);
   const [agentFilter, setAgentFilter] = useState<string>("all");
   const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
   );
+
+  async function reload() {
+    const { data } = await supabase
+      .from("deals")
+      .select("id, stage_id, title, value, position, assignee_id, contact:contacts(name, phone_number)")
+      .eq("pipeline_id", pipelineId);
+    if (data) setDeals(sortDeals(data as unknown as Deal[]));
+  }
 
   // Realtime: refrescar cuando otro usuario mueve/crea deals
   useEffect(() => {
@@ -47,19 +57,15 @@ export function KanbanBoard({ pipelineId, stages, initialDeals, agents }: Props)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "deals", filter: `pipeline_id=eq.${pipelineId}` },
-        async () => {
-          if (activeId) return; // no pisar un arrastre en curso
-          const { data } = await supabase
-            .from("deals")
-            .select("id, stage_id, title, value, position, assignee_id, contact:contacts(name, phone_number)")
-            .eq("pipeline_id", pipelineId);
-          if (data) setDeals(sortDeals(data as unknown as Deal[]));
+        () => {
+          if (!activeId) reload(); // no pisar un arrastre en curso
         }
       )
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase, pipelineId, activeId]);
 
   const visible = deals.filter((d) => agentFilter === "all" || d.assignee_id === agentFilter);
@@ -136,7 +142,21 @@ export function KanbanBoard({ pipelineId, stages, initialDeals, agents }: Props)
           ))}
         </select>
         {error && <span className="text-sm text-red-600" role="alert">{error}</span>}
+        <button
+          onClick={() => setShowForm(true)}
+          className="ml-auto rounded bg-sky-600 px-3 py-1.5 text-sm font-medium text-white"
+        >
+          + Nuevo deal
+        </button>
       </div>
+      {showForm && (
+        <NewDealForm
+          pipelineId={pipelineId}
+          stages={stages}
+          onCreated={reload}
+          onClose={() => setShowForm(false)}
+        />
+      )}
 
       <DndContext
         sensors={sensors}
