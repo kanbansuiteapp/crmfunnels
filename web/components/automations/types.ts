@@ -25,10 +25,10 @@ export type Run = {
 };
 
 export const TRIGGERS: Record<Trigger, { label: string; field: string; placeholder: string }> = {
-  incoming_message: { label: "Mensaje entrante", field: "keyword", placeholder: "Palabra clave (opcional)" },
-  tag_added: { label: "Etiqueta añadida", field: "tag_name", placeholder: "Nombre de la etiqueta (opcional)" },
+  incoming_message: { label: "Mensaje recibido", field: "keyword", placeholder: "Palabra clave (opcional)" },
+  tag_added: { label: "Tag agregado", field: "tag_name", placeholder: "Tag (opcional)" },
+  webhook: { label: "Integración con terceros", field: "event", placeholder: "Evento, ej. compra (opcional)" },
   inactivity: { label: "Inactividad", field: "hours", placeholder: "Horas sin mensajes (24)" },
-  webhook: { label: "Webhook de entrada", field: "event", placeholder: "Evento, ej. compra (opcional)" },
 };
 
 export const STEP_LABELS: Record<Step["type"], string> = {

@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { STEP_LABELS, TRIGGERS, type RunWithLog, type Step, type Trigger } from "../types";
-import { META, UNITS, UNIT_LABEL, type Cfg, type Kind, type StepNodeData, type TriggerData, type Unit } from "./model";
+import { STEP_LABELS, type RunWithLog, type Step } from "../types";
+import { META, UNITS, UNIT_LABEL, type Cfg, type Kind, type StepNodeData, type Unit } from "./model";
 
 const input = "w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400";
 const label = "mb-1 block text-sm font-semibold";
@@ -159,33 +159,6 @@ export function ConfigPanel({
       </fieldset>
       {canEdit && (
         <button onClick={onDelete} className="mt-6 w-full rounded-lg border border-red-300 py-2 text-sm font-semibold text-red-600 hover:bg-red-50">Eliminar este paso</button>
-      )}
-    </Shell>
-  );
-}
-
-// ───────────── disparador ─────────────
-export function TriggerPanel({ data, onChange, onClose, canEdit }: { data: TriggerData; onChange: (d: TriggerData) => void; onClose: () => void; canEdit: boolean }) {
-  const t = TRIGGERS[data.trigger_type];
-  return (
-    <Shell title="Disparador" onClose={onClose}>
-      <p className="mb-4 text-sm text-slate-500">Elige qué hace que se inicie este flujo.</p>
-      <fieldset disabled={!canEdit} className="space-y-2">
-        {(Object.keys(TRIGGERS) as Trigger[]).map((k) => (
-          <label key={k} className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-sm ${data.set && data.trigger_type === k ? "border-indigo-400 bg-indigo-50" : ""}`}>
-            <input type="radio" name="trigger" className="accent-indigo-600" checked={data.set && data.trigger_type === k}
-              onChange={() => onChange({ ...data, trigger_type: k, conditions: {}, set: true })} />
-            {TRIGGERS[k].label}
-          </label>
-        ))}
-      </fieldset>
-      {data.set && (
-        <div className="mt-4">
-          <label htmlFor="tr-cond" className={label}>{data.trigger_type === "inactivity" ? "Horas sin mensajes" : "Condición (opcional)"}</label>
-          <input id="tr-cond" disabled={!canEdit} value={String(data.conditions[t.field] ?? "")} placeholder={t.placeholder}
-            type={data.trigger_type === "inactivity" ? "number" : "text"} min={1}
-            onChange={(e) => onChange({ ...data, conditions: { [t.field]: e.target.value } })} className={input} />
-        </div>
       )}
     </Shell>
   );

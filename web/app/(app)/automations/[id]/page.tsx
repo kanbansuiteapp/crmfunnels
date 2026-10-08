@@ -6,7 +6,7 @@ import type { Automation, Folder, RunWithLog } from "@/components/automations/ty
 export default async function AutomationDetailPage({ params }: { params: { id: string } }) {
   const supabase = createClient();
   const { data: auth } = await supabase.auth.getUser();
-  const [{ data: me }, { data: automation }, { data: folders }, { data: runs }, { data: team }] = await Promise.all([
+  const [{ data: me }, { data: automation }, { data: folders }, { data: runs }, { data: team }, { data: tags }, { data: hooks }] = await Promise.all([
     supabase.from("profiles").select("role").eq("id", auth.user?.id ?? "").maybeSingle(),
     supabase.from("automations")
       .select("id, name, trigger_type, conditions, actions_tree_json, enabled, folder_id").eq("id", params.id).maybeSingle(),
@@ -14,6 +14,8 @@ export default async function AutomationDetailPage({ params }: { params: { id: s
     supabase.from("automation_runs").select("id, status, created_at, log")
       .eq("automation_id", params.id).order("created_at", { ascending: false }).limit(20),
     supabase.from("profiles").select("id, name").order("created_at"),
+    supabase.from("tags").select("name").order("name"),
+    supabase.from("webhooks").select("id, name").eq("direction", "in").order("created_at"),
   ]);
   if (!me) redirect("/");
   if (!automation) notFound();
@@ -26,7 +28,7 @@ export default async function AutomationDetailPage({ params }: { params: { id: s
         automation={automation as unknown as Automation}
         folders={(folders ?? []) as Folder[]}
         runs={(runs ?? []) as unknown as RunWithLog[]}
-        agents={team ?? []}
+        agents={team ?? []} tags={(tags ?? []).map((t) => t.name)} hooks={hooks ?? []}
         isAdmin={me.role === "admin"}
       />
     </main>

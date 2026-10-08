@@ -10,7 +10,8 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import type { Automation, Folder, RunWithLog } from "../types";
 import { FlowContext, NoteNode, StepNode, TriggerNode, type FlowCtx } from "./nodes";
-import { AddPanel, ConfigPanel, RunsPanel, TriggerPanel } from "./panels";
+import { AddPanel, ConfigPanel, RunsPanel } from "./panels";
+import { TriggerModal } from "./TriggerModal";
 import {
   createsCycle, defaultConfig, freeSpot, graphToTree, META, treeToGraph, validateStep,
   type Cfg, type Kind, type StepNodeData, type Tree, type TriggerData,
@@ -27,9 +28,10 @@ type Panel =
 
 type Props = {
   automation?: Automation; folders: Folder[]; runs: RunWithLog[]; agents: { id: string; name: string }[]; isAdmin: boolean;
+  tags: string[]; hooks: { id: string; name: string }[];
 };
 
-function Editor({ automation, folders, runs, agents, isAdmin }: Props) {
+function Editor({ automation, folders, runs, agents, isAdmin, tags, hooks }: Props) {
   const router = useRouter();
   const flow = useReactFlow();
 
@@ -44,7 +46,8 @@ function Editor({ automation, folders, runs, agents, isAdmin }: Props) {
   const [name, setName] = useState(automation?.name ?? defaultName);
   const [enabled, setEnabled] = useState(automation?.enabled ?? false);
   const [folderId, setFolderId] = useState<string | null>(automation?.folder_id ?? null);
-  const [panel, setPanel] = useState<Panel>(null);
+  // en una automatización nueva se abre directo la ventana del disparador (sin él no se puede guardar)
+  const [panel, setPanel] = useState<Panel>(automation || !isAdmin ? null : { kind: "trigger" });
   const [err, setErr] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -267,12 +270,13 @@ function Editor({ automation, folders, runs, agents, isAdmin }: Props) {
             <ConfigPanel key={selectedNode.id} data={selectedNode.data as StepNodeData} agents={agents} canEdit={canEdit}
               onChange={(c) => setConfig(selectedNode.id, c)} onDelete={() => removeNode(selectedNode.id)} onClose={() => setPanel(null)} />
           )}
-          {panel?.kind === "trigger" && trigData && (
-            <TriggerPanel data={trigData} canEdit={canEdit} onClose={() => setPanel(null)}
-              onChange={(d) => { setNodes((ns) => ns.map((n) => (n.id === "trigger" ? { ...n, data: d } : n))); touch(); }} />
-          )}
           {panel?.kind === "runs" && <RunsPanel runs={runs} onClose={() => setPanel(null)} />}
         </FlowContext.Provider>
+
+        {panel?.kind === "trigger" && trigData && (
+          <TriggerModal data={trigData} tags={tags} hooks={hooks} canEdit={canEdit} onClose={() => setPanel(null)}
+            onSave={(d) => { setNodes((ns) => ns.map((n) => (n.id === "trigger" ? { ...n, data: d } : n))); touch(); setPanel(null); }} />
+        )}
 
         {canEdit && (
           <button onClick={addNote} className="absolute bottom-4 left-4 z-10 flex items-center gap-2 rounded-lg bg-amber-400 px-4 py-3 text-sm font-semibold text-amber-950 shadow hover:bg-amber-300">
