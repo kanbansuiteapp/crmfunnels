@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Icon } from "@/components/ui/Icon";
+import { fmtBytes, fmtMB } from "@/lib/format";
 import { Alert, btnOutline, btnPrimary, Field, inputCls, Modal, ModalActions, Notice, useMe } from "@/components/settings/kit";
 
 type Channel = { id: string; name: string; phone_number: string | null; provider: string; status: string; needs_reconnect: boolean; wa_type: "messenger" | "business"; groups: number };
 type Overview = {
-  plan_name: string; contact_limit_hits: number; contacts: number; agents: number; devices: number;
+  plan_name: string; contact_limit_hits: number; storage_limit_hits: number; storage_bytes: number; max_storage_mb: number | null; contacts: number; agents: number; devices: number;
   max_contacts: number | null; max_agents: number | null; max_devices: number | null; channels: Channel[];
 };
 const nf = new Intl.NumberFormat("es-PE");
@@ -23,7 +24,7 @@ async function call(body: Record<string, unknown>): Promise<{ data: any; error: 
   return { data, error: null };
 }
 
-function Stat({ icon, label, value, max }: { icon: "users" | "user" | "phone"; label: string; value: number; max: number | null }) {
+function Stat({ icon, label, value, max, text }: { icon: "users" | "user" | "phone" | "image"; label: string; value: number; max: number | null; text?: string }) {
   const pct = max ? Math.min(100, (value / max) * 100) : 0;
   return (
     <div className="min-w-[250px] flex-1 rounded-xl border border-slate-100 bg-white p-5 shadow-sm">
@@ -31,7 +32,7 @@ function Stat({ icon, label, value, max }: { icon: "users" | "user" | "phone"; l
         <span className="text-slate-500"><Icon name={icon} size={36} /></span>
         <div>
           <p className="text-sm text-slate-500">{label}</p>
-          <p className="text-xl font-semibold text-slate-900">{nf.format(value)}{max ? ` / ${nf.format(max)}` : ""}</p>
+          <p className="text-xl font-semibold text-slate-900">{text ?? `${nf.format(value)}${max ? ` / ${nf.format(max)}` : ""}`}</p>
         </div>
       </div>
       <div className="mt-4 h-2 rounded-full bg-slate-100"><div className="h-2 rounded-full bg-lime-500" style={{ width: `${max ? Math.max(pct, 2) : 0}%` }} /></div>
@@ -198,12 +199,20 @@ export function ConnectionsClient() {
           <Stat icon="users" label="Contactos" value={ov?.contacts ?? 0} max={ov?.max_contacts ?? null} />
           <Stat icon="user" label="Total de agentes" value={ov?.agents ?? 0} max={ov?.max_agents ?? null} />
           <Stat icon="phone" label="Dispositivos" value={ov?.devices ?? 0} max={ov?.max_devices ?? null} />
+          <Stat icon="image" label="Almacenamiento" value={ov?.storage_bytes ?? 0} max={ov?.max_storage_mb != null ? ov.max_storage_mb * 1048576 : null}
+            text={`${fmtBytes(ov?.storage_bytes ?? 0)}${ov?.max_storage_mb != null ? ` / ${fmtMB(ov.max_storage_mb)}` : ""}`} />
         </div>
       </div>
       {ov && ov.max_contacts != null && ov.contacts >= ov.max_contacts && (
         <p role="alert" className="mt-6 rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800">
           Alcanzaste el límite de {nf.format(ov.max_contacts)} contactos de tu plan.
           {ov.contact_limit_hits > 0 ? ` ${nf.format(ov.contact_limit_hits)} contacto(s) nuevo(s) no se registraron.` : ""} Comunícate con tu proveedor para ampliarlo.
+        </p>
+      )}
+      {ov && ov.max_storage_mb != null && ov.storage_bytes >= ov.max_storage_mb * 1048576 && (
+        <p role="alert" className="mt-6 rounded-md bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Llenaste el almacenamiento de tu plan ({fmtBytes(ov.storage_bytes)} de {fmtMB(ov.max_storage_mb)}).
+          {ov.storage_limit_hits > 0 ? ` ${nf.format(ov.storage_limit_hits)} archivo(s) recibido(s) no se guardaron.` : ""} Comunícate con tu proveedor para ampliarlo.
         </p>
       )}
       <hr className="my-8 border-slate-100" />

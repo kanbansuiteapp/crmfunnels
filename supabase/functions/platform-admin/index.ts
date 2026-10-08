@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
   try {
     if (action === "list") {
       const { data: orgs, error } = await admin.from("organizations")
-        .select("id, name, plan_name, max_agents, max_devices, max_contacts, contact_limit_hits, active, created_at").order("created_at", { ascending: false });
+        .select("id, name, plan_name, max_agents, max_devices, max_contacts, max_storage_mb, contact_limit_hits, storage_limit_hits, active, created_at").order("created_at", { ascending: false });
       if (error) return json({ error: error.message }, 500);
       const out = await Promise.all((orgs ?? []).map(async (o: any) => {
         const count = async (table: string, extra?: (q: any) => any) => {
@@ -46,11 +46,12 @@ Deno.serve(async (req) => {
           if (extra) q = extra(q);
           return (await q).count ?? 0;
         };
-        const [agents, devices, contacts, owner] = await Promise.all([
+        const [agents, devices, contacts, owner, storage] = await Promise.all([
           count("profiles", (q) => q.eq("role", "agent")), count("channels"), count("contacts"),
           admin.from("profiles").select("name, email").eq("organization_id", o.id).eq("role", "admin").order("created_at").limit(1).maybeSingle(),
+          admin.rpc("org_storage_bytes", { p_org: o.id }),
         ]);
-        return { ...o, agents, devices, contacts, owner_name: owner.data?.name ?? "", owner_email: owner.data?.email ?? "" };
+        return { ...o, agents, devices, contacts, storage_bytes: Number(storage.data ?? 0), owner_name: owner.data?.name ?? "", owner_email: owner.data?.email ?? "" };
       }));
       return json({ ok: true, companies: out });
     }
@@ -63,10 +64,10 @@ Deno.serve(async (req) => {
       if (!name) return json({ error: "El nombre de la empresa es obligatorio" }, 400);
       if (!/^\S+@\S+\.\S+$/.test(email)) return json({ error: "Correo del titular inválido" }, 400);
       if (password.length < 8) return json({ error: "La contraseña necesita 8+ caracteres" }, 400);
-      for (const k of ["max_agents", "max_devices", "max_contacts"]) {
+      for (const k of ["max_agents", "max_devices", "max_contacts", "max_storage_mb"]) {
         if (body[k] !== undefined && limit(body[k]) === undefined) return json({ error: "Los límites deben ser números enteros (o vacío = sin límite)" }, 400);
       }
-      const lim = { max_agents: limit(body.max_agents), max_devices: limit(body.max_devices), max_contacts: limit(body.max_contacts) };
+      const lim = { max_agents: limit(body.max_agents), max_devices: limit(body.max_devices), max_contacts: limit(body.max_contacts), max_storage_mb: limit(body.max_storage_mb) };
 
       const { data: created, error: cErr } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
       if (cErr || !created.user) return json({ error: /already|registered/i.test(cErr?.message ?? "") ? "Ese correo ya está registrado" : (cErr?.message ?? "No se pudo crear el usuario") }, 400);
@@ -75,7 +76,7 @@ Deno.serve(async (req) => {
       const undo = async () => { await admin.auth.admin.deleteUser(uid); };
       const { data: org, error: oErr } = await admin.from("organizations").insert({
         name, plan_name: String(body.plan_name ?? "").trim().slice(0, 60) || "Plan",
-        max_agents: lim.max_agents ?? null, max_devices: lim.max_devices ?? null, max_contacts: lim.max_contacts ?? null,
+        max_agents: lim.max_agents ?? null, max_devices: lim.max_devices ?? null, max_contacts: lim.max_contacts ?? null, max_storage_mb: lim.max_storage_mb ?? null,
       }).select("id").single();
       if (oErr || !org) { await undo(); return json({ error: oErr?.message ?? "No se pudo crear la empresa" }, 500); }
 
@@ -94,12 +95,13 @@ Deno.serve(async (req) => {
       const patch: Record<string, unknown> = {};
       if (body.name !== undefined) { const n = String(body.name).trim().slice(0, 80); if (!n) return json({ error: "El nombre no puede estar vacío" }, 400); patch.name = n; }
       if (body.plan_name !== undefined) patch.plan_name = String(body.plan_name).trim().slice(0, 60) || "Plan";
-      for (const k of ["max_agents", "max_devices", "max_contacts"]) {
+      for (const k of ["max_agents", "max_devices", "max_contacts", "max_storage_mb"]) {
         if (body[k] === undefined) continue;
         const v = limit(body[k]);
         if (v === undefined) return json({ error: "Los límites deben ser números enteros (o vacío = sin límite)" }, 400);
         patch[k] = v;
       }
+      if (patch.max_storage_mb !== undefined) patch.storage_limit_hits = 0;
       if (patch.max_contacts !== undefined) patch.contact_limit_hits = 0; // al cambiar el límite se reinicia el aviso
       if (body.active !== undefined) patch.active = body.active === true;
       if (Object.keys(patch).length === 0) return json({ error: "Nada que cambiar" }, 400);

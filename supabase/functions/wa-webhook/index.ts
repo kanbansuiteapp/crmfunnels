@@ -21,6 +21,13 @@ async function saveMedia(conversationId: string, channelId: string, keyId: strin
   const { data: conv } = await admin.from("conversations").select("organization_id").eq("id", conversationId).single();
   if (!ch || !conv) return;
 
+  // límite de almacenamiento de la empresa: el mensaje queda guardado, pero sin el archivo
+  const { data: room } = await admin.rpc("storage_has_room", { p_org: conv.organization_id });
+  if (room === false) {
+    await admin.rpc("bump_storage_hits", { p_org: conv.organization_id });
+    return;
+  }
+
   const mime0 = String(node?.mimetype ?? "").split(";")[0] || undefined;
   const got = await fetchIncomingMedia(ch, keyId, node?.base64, mime0);
   if (got.bytes.length === 0 || got.bytes.length > MAX_BYTES) throw new Error("archivo vacío o demasiado grande");
