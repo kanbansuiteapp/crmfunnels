@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 export type WaGroup = {
   id: string; name: string; origin: string; type: "group" | "community" | "channel";
   clicks: number; admins: number; participants: number; scheduled_messages: number;
-  capacity: number | null; created_at: string; updated_at: string;
+  capacity: number | null; auto_capacity: boolean; invite_link: string | null; avatar_url: string | null; created_at: string; updated_at: string;
 };
 
 type ColKey = "origin" | "clicks" | "admins" | "participants" | "scheduled_messages" | "type" | "capacity" | "created_at" | "updated_at";
@@ -17,7 +19,24 @@ const COLS: { key: ColKey; label: string }[] = [
 ];
 const TYPES = { group: "Grupo", community: "Comunidad", channel: "Canal" } as const;
 const ORIGINS: Record<string, string> = { import: "Importado", created: "Creado" };
-const day = (iso: string) => new Date(iso).toLocaleDateString("es", { day: "2-digit", month: "short", year: "numeric" }).replace(/\./g, "");
+const day = (iso: string) => {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString("es", { day: "2-digit", month: "short", year: "numeric" }).replace(/\./g, "")}, ${d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
+};
+const Icon = ({ children }: { children: string }) => <span className="mr-1.5 text-slate-400" aria-hidden>{children}</span>;
+
+// círculos verdes de los administradores (máximo 3) y "+N" con el resto
+function Admins({ n }: { n: number }) {
+  if (n <= 0) return <span className="text-slate-400">0</span>;
+  return (
+    <span className="flex items-center" title={`${n} admins`}>
+      {Array.from({ length: Math.min(n, 3) }, (_, i) => (
+        <span key={i} className="-mr-1.5 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-green-100 text-xs text-green-600" aria-hidden>✆</span>
+      ))}
+      {n > 3 && <span className="ml-3 flex h-7 min-w-7 items-center justify-center rounded-full border bg-white px-1 text-[11px]">+{n - 3}</span>}
+    </span>
+  );
+}
 
 export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; devices: { id: string; name: string }[]; isAdmin: boolean }) {
   const [q, setQ] = useState("");
@@ -27,6 +46,15 @@ export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; d
   const [menu, setMenu] = useState<null | "cols" | "filter">(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [importOpen, setImportOpen] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const router = useRouter();
+
+  async function toggleCapacity(id: string, on: boolean) {
+    setErr(null);
+    const { error } = await createClient().rpc("set_group_capacity", { p_id: id, p_on: on });
+    if (error) return setErr(error.message);
+    router.refresh();
+  }
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -46,13 +74,32 @@ export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; d
   const allOn = rows.length > 0 && rows.every((r) => picked.has(r.id));
   const th = "whitespace-nowrap px-4 py-4 text-xs font-medium uppercase tracking-wide text-slate-500";
   const visible = COLS.filter((c) => cols[c.key]);
-  const cell = (g: WaGroup, k: ColKey) =>
-    k === "origin" ? ORIGINS[g.origin] ?? g.origin
-    : k === "type" ? TYPES[g.type]
-    : k === "capacity" ? g.capacity ?? "—"
-    : k === "created_at" ? day(g.created_at)
-    : k === "updated_at" ? day(g.updated_at)
-    : g[k];
+  const cell = (g: WaGroup, k: ColKey): React.ReactNode => {
+    switch (k) {
+      case "origin":
+        return g.origin === "created"
+          ? <span className="inline-flex items-center rounded-md bg-slate-100 px-2.5 py-1 text-sm font-medium">✦ <span className="ml-1">Funnelchat</span></span>
+          : <span className="inline-flex items-center rounded-md bg-green-50 px-2.5 py-1 text-sm font-medium text-green-700">⇪ <span className="ml-1">WhatsApp</span></span>;
+      case "clicks": return <span className="font-medium"><Icon>↖</Icon>{g.clicks}</span>;
+      case "admins": return <Admins n={g.admins} />;
+      case "participants": return <span className="font-medium"><Icon>👥</Icon>{g.participants}</span>;
+      case "scheduled_messages": return <span className="font-medium"><Icon>💬</Icon>{g.scheduled_messages}</span>;
+      case "type":
+        return g.type === "community"
+          ? <span className="inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white">👥 <span className="ml-2">Comunidad</span></span>
+          : <span className="inline-flex items-center rounded-full bg-slate-100 px-4 py-2 text-sm font-medium">👥 <span className="ml-2">{TYPES[g.type]}</span></span>;
+      case "capacity":
+        return (
+          <button type="button" role="switch" aria-checked={g.auto_capacity} aria-label={`Capacidad de ${g.name}`} disabled={!isAdmin}
+            onClick={() => toggleCapacity(g.id, !g.auto_capacity)}
+            className={`relative h-6 w-11 rounded-full transition ${g.auto_capacity ? "bg-slate-900" : "bg-slate-200"} disabled:opacity-50`}>
+            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${g.auto_capacity ? "left-[22px]" : "left-0.5"}`} />
+          </button>
+        );
+      case "created_at": return day(g.created_at);
+      case "updated_at": return day(g.updated_at);
+    }
+  };
 
   return (
     <div>
@@ -97,8 +144,9 @@ export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; d
         </div>
       </div>
 
+      {err && <p className="mb-3 text-sm text-red-600" role="alert">{err}</p>}
       <div className="overflow-x-auto rounded-2xl border bg-white">
-        <table className="w-full min-w-[1000px] text-left text-sm">
+        <table className="w-full min-w-[1100px] text-left text-sm">
           <thead className="bg-slate-50">
             <tr>
               <th className="w-12 px-4 py-4">
@@ -127,8 +175,21 @@ export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; d
                   <input type="checkbox" aria-label={`Seleccionar ${g.name}`} checked={picked.has(g.id)}
                     onChange={() => setPicked((p) => { const n = new Set(p); n.has(g.id) ? n.delete(g.id) : n.add(g.id); return n; })} />
                 </td>
-                <td className="px-4 py-4 font-medium">{g.name}</td>
-                {visible.map((c) => <td key={c.key} className="whitespace-nowrap px-4 py-4 text-slate-600">{cell(g, c.key)}</td>)}
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-slate-100 text-slate-400">
+                      {g.avatar_url
+                        // eslint-disable-next-line @next/next/no-img-element
+                        ? <img src={g.avatar_url} alt="" className="h-full w-full object-cover" />
+                        : "👥"}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block max-w-[240px] truncate font-semibold" title={g.name}>{g.name}</span>
+                      {g.invite_link && <a href={g.invite_link} target="_blank" rel="noreferrer" className="block max-w-[240px] truncate text-xs text-slate-500 hover:underline">{g.invite_link}</a>}
+                    </span>
+                  </div>
+                </td>
+                {visible.map((c) => <td key={c.key} className="whitespace-nowrap px-4 py-3 text-slate-600">{cell(g, c.key)}</td>)}
               </tr>
             ))}
           </tbody>
