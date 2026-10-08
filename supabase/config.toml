@@ -1,0 +1,7 @@
+project_id = "snfifjecgmjerdcfvhzp"
+
+[functions.wa-webhook]
+verify_jwt = false
+
+[functions.send-message]
+verify_jwt = true
