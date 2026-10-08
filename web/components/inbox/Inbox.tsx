@@ -4,26 +4,29 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Avatar } from "./Avatar";
 import { ChannelForm } from "./ChannelForm";
-import { Composer } from "./Composer";
+import { Composer, type Attachment } from "./Composer";
 import { ContactPanel } from "./ContactPanel";
 import { ConversationList } from "./ConversationList";
 import { MessageList } from "./MessageList";
 import type { ChannelRef, Conversation, Member, Message } from "./types";
 
 export function Inbox({
-  initialConversations, channels, isAdmin, meId, team,
+  initialConversations, channels, isAdmin, meId, orgId, team,
 }: {
-  initialConversations: Conversation[]; channels: ChannelRef[]; isAdmin: boolean; meId: string; team: Member[];
+  initialConversations: Conversation[]; channels: ChannelRef[]; isAdmin: boolean; meId: string; orgId: string; team: Member[];
 }) {
   const supabase = useMemo(() => createClient(), []);
   const [conversations, setConversations] = useState(initialConversations);
   const [channelsOk, setChannelsOk] = useState(channels.length > 0);
   const [selected, setSelected] = useState<string | null>(null); // como en Funnelchat: nada abierto al entrar
   const [messages, setMessages] = useState<Message[]>([]);
+  const [urls, setUrls] = useState<Record<string, string>>({}); // ruta del bucket -> URL firmada
   const [showContact, setShowContact] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selected;
+  const urlsRef = useRef<Record<string, string>>({});
+  urlsRef.current = urls;
 
   const loadConversations = useCallback(async () => {
     const { data } = await supabase.rpc("inbox_conversations");
@@ -33,10 +36,21 @@ export function Inbox({
   const loadMessages = useCallback(async (id: string) => {
     const { data } = await supabase
       .from("messages")
-      .select("id, conversation_id, direction, content, by_ai, status, timestamp")
+      .select("id, conversation_id, direction, content, by_ai, status, timestamp, media_url, media_type, media_mime, media_name")
       .eq("conversation_id", id)
       .order("timestamp");
-    if (data) setMessages(data as Message[]);
+    if (!data) return;
+    setMessages(data as Message[]);
+    // el bucket es privado: se piden URLs firmadas (1 h) solo para los archivos que aún no tenemos
+    const missing = (data as Message[]).map((m) => m.media_url).filter((p): p is string => !!p && !urlsRef.current[p]);
+    if (missing.length) {
+      const { data: signed } = await supabase.storage.from("chat-media").createSignedUrls([...new Set(missing)], 3600);
+      if (signed) {
+        const add: Record<string, string> = {};
+        for (const x of signed) if (x.signedUrl && x.path) add[x.path] = x.signedUrl;
+        setUrls((u) => ({ ...u, ...add }));
+      }
+    }
   }, [supabase]);
 
   // abrir un chat: se cargan sus mensajes y se marca como leído (también en pantalla, sin esperar)
@@ -106,11 +120,11 @@ export function Inbox({
     return null;
   }
 
-  async function send(content: string) {
+  async function send(content: string, media?: Attachment) {
     if (!selected) return;
     setErr(null);
     const { data, error } = await supabase.functions.invoke("send-message", {
-      body: { conversation_id: selected, content },
+      body: { conversation_id: selected, content, media: media && { path: media.path, name: media.name, mime: media.mime } },
     });
     if (error) setErr("No se pudo enviar el mensaje.");
     else if (data && data.ok === false) setErr(`Envío fallido: ${data.detail ?? "error"}`);
@@ -173,10 +187,11 @@ export function Inbox({
             </header>
 
             <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/60">
-              <MessageList messages={messages} />
+              <MessageList messages={messages} urls={urls} />
             </div>
             {err && <p className="border-t bg-red-50 px-4 py-2 text-sm text-red-700" role="alert">{err}</p>}
-            <Composer channelName={current.channel.name} isAdmin={isAdmin} onSend={send} />
+            <Composer key={current.id} channelName={current.channel.name} isAdmin={isAdmin}
+              orgId={orgId} conversationId={current.id} onSend={send} />
           </>
         )}
       </section>

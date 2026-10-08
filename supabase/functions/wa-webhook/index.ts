@@ -2,11 +2,44 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { tick } from "../_shared/engine.ts";
 import { aiRespond } from "../_shared/ai.ts";
+import { fetchIncomingMedia, type MediaType } from "../_shared/provider.ts";
 
 const admin = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 );
+
+const MAX_BYTES = 16 * 1024 * 1024;
+const EXT: Record<string, string> = {
+  "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif", "audio/ogg": "ogg", "audio/mpeg": "mp3",
+  "audio/mp4": "m4a", "audio/webm": "webm", "video/mp4": "mp4", "application/pdf": "pdf",
+};
+
+// Descarga el archivo desde Evolution, lo guarda en el bucket privado y lo enlaza al mensaje recibido
+async function saveMedia(conversationId: string, channelId: string, keyId: string, kind: MediaType, node: any) {
+  const { data: ch } = await admin.from("channels").select("api_url, api_key, instance_name").eq("id", channelId).single();
+  const { data: conv } = await admin.from("conversations").select("organization_id").eq("id", conversationId).single();
+  if (!ch || !conv) return;
+
+  const mime0 = String(node?.mimetype ?? "").split(";")[0] || undefined;
+  const got = await fetchIncomingMedia(ch, keyId, node?.base64, mime0);
+  if (got.bytes.length === 0 || got.bytes.length > MAX_BYTES) throw new Error("archivo vacío o demasiado grande");
+
+  const mime = (got.mime || "application/octet-stream").split(";")[0];
+  const ext = EXT[mime] ?? (node?.fileName?.split(".").pop() ?? "bin").replace(/[^a-z0-9]/gi, "").slice(0, 5);
+  const path = `${conv.organization_id}/${conversationId}/${crypto.randomUUID()}.${ext}`;
+  const up = await admin.storage.from("chat-media").upload(path, got.bytes, { contentType: mime });
+  if (up.error) throw new Error(up.error.message);
+
+  // el mensaje recién guardado por ingest_message: el último entrante sin archivo en esta conversación
+  const { data: msg } = await admin.from("messages").select("id").eq("conversation_id", conversationId)
+    .eq("direction", "in").is("media_url", null).order("timestamp", { ascending: false }).limit(1).maybeSingle();
+  if (!msg) return;
+  await admin.from("messages").update({
+    media_url: path, media_type: kind, media_mime: mime,
+    media_name: String(node?.fileName ?? got.name ?? "").slice(0, 120) || null,
+  }).eq("id", msg.id);
+}
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -34,15 +67,17 @@ Deno.serve(async (req) => {
 
   const m = data.message ?? {};
   const content: string | null =
-    m.conversation ?? m.extendedTextMessage?.text ?? m.imageMessage?.caption ?? null;
-  const media = m.imageMessage ? "[imagen]" : m.audioMessage ? "[audio]" : m.documentMessage ? "[documento]" : null;
-  if (!content && !media) return json({ ok: true, ignored: "empty" });
+    m.conversation ?? m.extendedTextMessage?.text ?? m.imageMessage?.caption ?? m.videoMessage?.caption ?? m.documentMessage?.caption ?? null;
+  const mediaNode = m.imageMessage ?? m.audioMessage ?? m.videoMessage ?? m.documentMessage ?? m.stickerMessage ?? null;
+  const kind: MediaType | null = m.imageMessage ? "image" : m.audioMessage ? "audio" : m.videoMessage ? "video"
+    : m.documentMessage ? "document" : m.stickerMessage ? "sticker" : null;
+  if (!content && !kind) return json({ ok: true, ignored: "empty" });
 
   const { data: conversationId, error } = await admin.rpc("ingest_message", {
     p_channel_id: channel.id,
     p_phone: jid.split("@")[0],
     p_name: data.pushName ?? null,
-    p_content: content ?? media,
+    p_content: content,
     p_media_url: null,
   });
   if (error) return json({ error: error.message }, 500);
@@ -57,7 +92,11 @@ Deno.serve(async (req) => {
   }
 
   // dispara las automatizaciones sin bloquear la respuesta al proveedor
-  const bg = Promise.allSettled([tick(admin, 10), aiRespond(admin, conversationId as string)]);
+  const mediaJob = kind
+    ? saveMedia(conversationId as string, channel.id, data.key.id, kind, { ...mediaNode, base64: data.message?.base64 ?? mediaNode?.base64 })
+        .catch((e) => console.error("media", String(e)))
+    : Promise.resolve();
+  const bg = Promise.allSettled([tick(admin, 10), aiRespond(admin, conversationId as string), mediaJob]);
   // @ts-ignore EdgeRuntime existe en el runtime de Supabase
   if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(bg); else await bg;
   return json({ ok: true });

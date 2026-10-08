@@ -8,10 +8,11 @@ export default async function InboxPage() {
   const [{ data: conversations }, { data: channels }, { data: team }] = await Promise.all([
     supabase.rpc("inbox_conversations"),
     supabase.from("channels").select("id, name").order("created_at"),
-    supabase.from("profiles").select("id, name, role").order("created_at"),
+    supabase.from("profiles").select("id, name, role, organization_id").order("created_at"),
   ]);
   const meId = auth.user?.id ?? "";
-  const isAdmin = team?.find((m) => m.id === meId)?.role === "admin";
+  const me = team?.find((m) => m.id === meId);
+  const isAdmin = me?.role === "admin";
 
   return (
     <main className="h-full p-4">
@@ -20,6 +21,7 @@ export default async function InboxPage() {
         channels={channels ?? []}
         isAdmin={isAdmin}
         meId={meId}
+        orgId={me?.organization_id ?? ""}
         team={(team ?? []).map((m) => ({ id: m.id, name: m.name }))}
       />
     </main>

@@ -15,6 +15,9 @@ function when(iso: string) {
     : d.toLocaleDateString("es", { day: "2-digit", month: "2-digit" });
 }
 
+const preview = (t: string | null, name: string | null) =>
+  t === "image" ? "📷 Foto" : t === "sticker" ? "🏷️ Sticker" : t === "audio" ? "🎤 Audio" : t === "video" ? "🎬 Video" : t === "document" ? `📄 ${name ?? "Documento"}` : "Mensaje multimedia";
+
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 export function ConversationList({
@@ -188,7 +191,7 @@ export function ConversationList({
                     <span className="shrink-0 text-xs text-slate-400">› {c.assignee_name ?? "Sin asignar"}</span>
                   </span>
                   <span className="mt-0.5 block truncate text-sm text-slate-500">
-                    {lm ? <>{lm.direction === "out" && <span className="text-slate-400">{lm.by_ai ? "🤖 " : "✓ "}</span>}{lm.content ?? "Mensaje multimedia"}</> : "Sin mensajes todavía"}
+                    {lm ? <>{lm.direction === "out" && <span className="text-slate-400">{lm.by_ai ? "🤖 " : "✓ "}</span>}{lm.content ?? preview(lm.media_type, lm.media_name)}</> : "Sin mensajes todavía"}
                   </span>
                 </span>
                 <span className="flex shrink-0 flex-col items-end gap-1">
