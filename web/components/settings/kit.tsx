@@ -104,7 +104,7 @@ export function Check({ checked, onChange, label }: { checked: boolean; onChange
   return <input type="checkbox" aria-label={label} checked={checked} onChange={(e) => onChange(e.target.checked)} className="h-4 w-4 rounded border-slate-300 accent-indigo-500" />;
 }
 
-export function Modal({ title, description, onClose, children, wide }: { title: string; description?: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
+export function Modal({ title, description, onClose, children, wide, extra }: { title: string; description?: string; onClose: () => void; children: ReactNode; wide?: boolean; extra?: boolean }) {
   useEffect(() => {
     const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", esc);
@@ -112,7 +112,7 @@ export function Modal({ title, description, onClose, children, wide }: { title: 
   }, [onClose]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-label={title} className={`relative my-auto w-full ${wide ? "max-w-xl" : "max-w-lg"} rounded-xl bg-white p-8 shadow-2xl`}>
+      <div role="dialog" aria-modal="true" aria-label={title} className={`relative my-auto w-full ${extra ? "max-w-3xl" : wide ? "max-w-xl" : "max-w-lg"} rounded-xl bg-white p-8 shadow-2xl`}>
         <button onClick={onClose} aria-label="Cerrar" className="absolute right-5 top-4 text-3xl leading-none text-slate-700 hover:text-black">×</button>
         <h2 className="text-2xl font-bold text-[#1d1b4d]">{title}</h2>
         {description && <p className="mt-3 text-slate-500">{description}</p>}

@@ -34,17 +34,70 @@ const parseLimit = (v: string): number | null | "bad" => {
   return Number.isInteger(n) && n >= 0 ? n : "bad";
 };
 
-function Limits({ v, set }: { v: { a: string; d: string; c: string }; set: (n: { a: string; d: string; c: string }) => void }) {
-  const f = (k: "a" | "d" | "c", label: string) => (
-    <Field label={label}>
-      <input inputMode="numeric" value={v[k]} onChange={(e) => set({ ...v, [k]: e.target.value.replace(/\D/g, "") })} placeholder="Sin límite" className={inputCls} />
-    </Field>
-  );
+type LimitVals = { a: string; d: string; c: string };
+
+// Tarjeta de un límite: interruptor "Sin límite", contador con − / + y valores rápidos
+function LimitCard({ label, hint, icon, value, onChange, presets, used }: {
+  label: string; hint: string; icon: string; value: string; onChange: (v: string) => void; presets: number[]; used?: number;
+}) {
+  const unlimited = value === "";
+  const n = Number(value) || 0;
+  const step = presets[0] >= 1000 ? 500 : 1;
+  const tooLow = !unlimited && used != null && n < used;
   return (
-    <div>
-      <p className="mt-6 text-sm font-semibold text-slate-900">Límites del plan <span className="font-normal text-slate-500">(vacío = sin límite)</span></p>
-      <div className="grid grid-cols-3 gap-4">{f("a", "Vendedores")}{f("d", "Dispositivos")}{f("c", "Contactos")}</div>
+    <div className={`flex flex-col rounded-xl border p-4 transition ${unlimited ? "border-slate-200 bg-slate-50" : "border-indigo-200 bg-indigo-50/40"}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-semibold text-slate-900"><span aria-hidden>{icon}</span>{label}</p>
+          <p className="mt-0.5 text-xs text-slate-500">{hint}</p>
+        </div>
+        <button type="button" role="switch" aria-checked={!unlimited} aria-label={`Limitar ${label.toLowerCase()}`}
+          onClick={() => onChange(unlimited ? String(presets[1] ?? presets[0]) : "")}
+          className={`mt-0.5 flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition ${unlimited ? "bg-slate-300" : "bg-indigo-500"}`}>
+          <span className={`h-5 w-5 rounded-full bg-white shadow transition ${unlimited ? "" : "translate-x-5"}`} />
+        </button>
+      </div>
+
+      <div className="mt-4 flex h-12 items-center">
+        {unlimited ? (
+          <p className="flex items-center gap-2 text-sm text-slate-500"><span className="text-2xl leading-none text-slate-400" aria-hidden>∞</span> Sin límite</p>
+        ) : (
+          <div className="flex w-full items-center overflow-hidden rounded-lg border border-indigo-200 bg-white">
+            <button type="button" onClick={() => onChange(String(Math.max(0, n - step)))} aria-label="Restar" className="h-12 w-11 shrink-0 text-xl text-slate-600 hover:bg-slate-50">−</button>
+            <input inputMode="numeric" value={value} aria-label={`Límite de ${label.toLowerCase()}`} onChange={(e) => onChange(e.target.value.replace(/\D/g, ""))}
+              className="h-12 w-full min-w-0 text-center text-lg font-semibold text-slate-900 outline-none" />
+            <button type="button" onClick={() => onChange(String(n + step))} aria-label="Sumar" className="h-12 w-11 shrink-0 text-xl text-slate-600 hover:bg-slate-50">+</button>
+          </div>
+        )}
+      </div>
+
+      <div className={`mt-3 flex flex-wrap gap-1.5 ${unlimited ? "pointer-events-none opacity-40" : ""}`} aria-hidden={unlimited}>
+        {presets.map((p) => (
+          <button key={p} type="button" onClick={() => onChange(String(p))}
+            className={`rounded-full border px-2.5 py-1 text-xs font-medium ${!unlimited && n === p ? "border-indigo-500 bg-indigo-500 text-white" : "border-slate-200 bg-white text-slate-600 hover:border-indigo-300"}`}>
+            {nf.format(p)}
+          </button>
+        ))}
+      </div>
+
+      {used != null && <p className={`mt-3 text-xs ${tooLow ? "font-medium text-amber-600" : "text-slate-500"}`}>En uso: {nf.format(used)}{tooLow ? " · ya supera este límite; no podrá crear más" : ""}</p>}
     </div>
+  );
+}
+
+function Limits({ v, set, used }: { v: LimitVals; set: (n: LimitVals) => void; used?: { a: number; d: number; c: number } }) {
+  return (
+    <section className="mt-8" aria-label="Límites del plan">
+      <div className="flex items-end justify-between">
+        <h3 className="text-base font-semibold text-slate-900">Límites del plan</h3>
+        <p className="text-xs text-slate-500">Apaga el interruptor para dejarlo sin límite</p>
+      </div>
+      <div className="mt-3 grid items-stretch gap-4 sm:grid-cols-3">
+        <LimitCard label="Vendedores" hint="Usuarios con número" icon="👤" value={v.a} onChange={(x) => set({ ...v, a: x })} presets={[3, 5, 10, 25]} used={used?.a} />
+        <LimitCard label="Dispositivos" hint="Números de WhatsApp" icon="📱" value={v.d} onChange={(x) => set({ ...v, d: x })} presets={[1, 2, 5, 10]} used={used?.d} />
+        <LimitCard label="Contactos" hint="Contactos guardados" icon="👥" value={v.c} onChange={(x) => set({ ...v, c: x })} presets={[1000, 5000, 10000, 50000]} used={used?.c} />
+      </div>
+    </section>
   );
 }
 
@@ -73,17 +126,19 @@ function CompanyModal({ company, onClose, onSaved }: { company: Company | null; 
   };
 
   return (
-    <Modal title={company ? "Editar empresa" : "Nueva empresa"} description={company ? "Cambia el nombre, el plan y los límites de esta empresa." : "Crea la empresa y el acceso de su titular (correo y contraseña). Él creará a sus vendedores."} onClose={onClose} wide>
-      <Field label="Nombre de la empresa" required><input value={name} maxLength={80} onChange={(e) => setName(e.target.value)} className={inputCls} autoFocus /></Field>
-      <Field label="Nombre del plan"><input value={plan} maxLength={60} onChange={(e) => setPlan(e.target.value)} placeholder="Ej. Plan Pro" className={inputCls} /></Field>
-      {!company && (
-        <>
-          <Field label="Nombre del titular"><input value={ownerName} maxLength={80} onChange={(e) => setOwnerName(e.target.value)} className={inputCls} /></Field>
-          <Field label="Correo del titular" required><input type="email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} placeholder="empresa@correo.com" className={inputCls} /></Field>
-          <Field label="Contraseña inicial" required><input type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo 8 caracteres" autoComplete="off" className={inputCls} /></Field>
-        </>
-      )}
-      <Limits v={lim} set={setLim} />
+    <Modal title={company ? "Editar empresa" : "Nueva empresa"} description={company ? "Cambia el nombre, el plan y los límites de esta empresa." : "Crea la empresa y el acceso de su titular (correo y contraseña). Él creará a sus vendedores."} onClose={onClose} extra>
+      <div className="grid gap-x-5 gap-y-5 sm:grid-cols-2 [&>*]:!mt-0">
+        <Field label="Nombre de la empresa" required><input value={name} maxLength={80} onChange={(e) => setName(e.target.value)} className={inputCls} autoFocus /></Field>
+        <Field label="Nombre del plan"><input value={plan} maxLength={60} onChange={(e) => setPlan(e.target.value)} placeholder="Ej. Plan Pro" className={inputCls} /></Field>
+        {!company && (
+          <>
+            <Field label="Nombre del titular"><input value={ownerName} maxLength={80} onChange={(e) => setOwnerName(e.target.value)} className={inputCls} /></Field>
+            <Field label="Correo del titular" required><input type="email" value={ownerEmail} onChange={(e) => setOwnerEmail(e.target.value)} placeholder="empresa@correo.com" className={inputCls} /></Field>
+            <Field label="Contraseña inicial" required><input type="text" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mínimo 8 caracteres" autoComplete="off" className={inputCls} /></Field>
+          </>
+        )}
+      </div>
+      <Limits v={lim} set={setLim} used={company ? { a: company.agents, d: company.devices, c: company.contacts } : undefined} />
       <Alert text={err} />
       <ModalActions onCancel={onClose} onOk={save} okLabel={company ? "Guardar" : "Crear empresa"} disabled={!valid} busy={busy} />
     </Modal>
