@@ -1,7 +1,7 @@
 // Motor de automatizaciones: procesa la cola de eventos y reanuda runs en espera.
 // deno-lint-ignore-file no-explicit-any
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
-import { sendText } from "./provider.ts";
+import { mediaTypeOf, sendMedia, sendText, toBase64 } from "./provider.ts";
 
 type Step = { type: string; config?: Record<string, any>; then?: Step[]; else?: Step[] };
 type Db = SupabaseClient;
@@ -142,8 +142,32 @@ async function runAction(db: Db, step: Step, contact: any, run: any): Promise<st
   switch (step.type) {
     case "send_message": {
       const text = render(cfg.text, contact).trim();
-      if (!text) throw new Error("mensaje vacío");
       const conv = await ensureConversation(db, contact);
+
+      if (cfg.media_path) {
+        // archivo adjunto: se descarga del bucket, se envía y se copia a la carpeta de la conversación
+        const path = String(cfg.media_path);
+        if (!path.startsWith(`${contact.organization_id}/automations/`)) throw new Error("archivo no válido");
+        const dl = await db.storage.from("chat-media").download(path);
+        if (dl.error || !dl.data) throw new Error("no se encontró el archivo del paso");
+        if (dl.data.size > 16 * 1024 * 1024) throw new Error("archivo demasiado grande");
+        const mime = (dl.data.type || String(cfg.media_mime ?? "application/octet-stream")).split(";")[0];
+        const type = mediaTypeOf(mime);
+        const bytes = new Uint8Array(await dl.data.arrayBuffer());
+        const name = String(cfg.media_name ?? "archivo").slice(0, 120);
+        await sendMedia(conv.channel, contact.phone_number, { type, mime, name, base64: toBase64(bytes), caption: type === "audio" ? "" : text });
+
+        const copy = `${contact.organization_id}/${conv.id}/${crypto.randomUUID()}-${name.replace(/[^\w.-]+/g, "_")}`;
+        const up = await db.storage.from("chat-media").upload(copy, bytes, { contentType: mime });
+        await db.from("messages").insert({
+          organization_id: contact.organization_id, conversation_id: conv.id, contact_id: contact.id,
+          direction: "out", content: type === "audio" ? null : text || null, status: "sent",
+          ...(up.error ? {} : { media_url: copy, media_type: type, media_mime: mime, media_name: name }),
+        });
+        return `${type === "image" ? "imagen" : type === "audio" ? "audio" : type === "video" ? "video" : "documento"} enviado`;
+      }
+
+      if (!text) throw new Error("mensaje vacío");
       await sendText(conv.channel, contact.phone_number, text);
       // no se actualiza last_message_at: así la inactividad no se reinicia por mensajes automáticos
       await db.from("messages").insert({

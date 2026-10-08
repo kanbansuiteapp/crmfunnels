@@ -5,33 +5,29 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Background, BackgroundVariant, Controls, MiniMap, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow,
-  type Connection, type Edge, type Node,
+  type Connection, type Edge, type FinalConnectionState, type Node,
 } from "@xyflow/react";
 import { createClient } from "@/lib/supabase/client";
 import type { Automation, Folder, RunWithLog } from "../types";
-import { FlowContext, NoteNode, StepNode, TriggerNode, type FlowCtx } from "./nodes";
-import { AddPanel, ConfigPanel, RunsPanel } from "./panels";
+import { FlowContext, NoteNode, PickerNode, StepNode, TriggerNode, type FlowCtx } from "./nodes";
+import { RunsPanel } from "./panels";
 import { TriggerModal } from "./TriggerModal";
 import {
   createsCycle, defaultConfig, freeSpot, graphToTree, META, treeToGraph, validateStep,
-  type Cfg, type Kind, type StepNodeData, type Tree, type TriggerData,
+  type Cfg, type Kind, type PickerData, type StepNodeData, type Tree, type TriggerData,
 } from "./model";
 
-const nodeTypes = { trigger: TriggerNode, step: StepNode, note: NoteNode };
+const nodeTypes = { trigger: TriggerNode, step: StepNode, note: NoteNode, picker: PickerNode };
+const PICKER = "picker";
 
-type Panel =
-  | { kind: "add"; sourceId: string; handle: string }
-  | { kind: "config"; id: string }
-  | { kind: "trigger" }
-  | { kind: "runs" }
-  | null;
+type Panel = { kind: "trigger" } | { kind: "runs" } | null;
 
 type Props = {
   automation?: Automation; folders: Folder[]; runs: RunWithLog[]; agents: { id: string; name: string }[]; isAdmin: boolean;
-  tags: string[]; hooks: { id: string; name: string }[];
+  tags: string[]; hooks: { id: string; name: string }[]; orgId: string;
 };
 
-function Editor({ automation, folders, runs, agents, isAdmin, tags, hooks }: Props) {
+function Editor({ automation, folders, runs, agents, isAdmin, tags, hooks, orgId }: Props) {
   const router = useRouter();
   const flow = useReactFlow();
 
@@ -64,22 +60,54 @@ function Editor({ automation, folders, runs, agents, isAdmin, tags, hooks }: Pro
   }, [dirty]);
 
   // ───────── operaciones sobre el lienzo ─────────
-  const addNode = useCallback((kind: Kind, sourceId: string, handle: string) => {
-    const id = `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+  const closePicker = useCallback(() => {
+    setNodes((ns) => ns.filter((n) => n.id !== PICKER));
+    setEdges((es) => es.filter((e) => e.target !== PICKER));
+  }, [setNodes, setEdges]);
+
+  // abre la ventanita "¿Qué desea agregar?" unida a la salida indicada (en `at` si se soltó el arrastre ahí)
+  const openAdd = useCallback((sourceId: string, handle: string, at?: { x: number; y: number }) => {
     setNodes((ns) => {
-      const parent = ns.find((n) => n.id === sourceId);
-      const position = freeSpot(ns, parent, handle);
-      return [...ns, { id, type: "step", position, data: { kind, config: defaultConfig(kind) } satisfies StepNodeData }];
+      const rest = ns.filter((n) => n.id !== PICKER);
+      const parent = rest.find((n) => n.id === sourceId);
+      const position = at ?? freeSpot(rest, parent, handle);
+      return [...rest, { id: PICKER, type: "picker", position, data: { sourceId, handle } satisfies PickerData, deletable: false, selectable: false }];
     });
     setEdges((es) => [
-      ...es.filter((e) => !(e.source === sourceId && (e.sourceHandle ?? "next") === handle)),
+      ...es.filter((e) => e.target !== PICKER),
+      { id: `${sourceId}:${handle}->${PICKER}`, source: sourceId, sourceHandle: handle, target: PICKER, type: "smoothstep", animated: true },
+    ]);
+  }, [setNodes, setEdges]);
+
+  // la ventanita se convierte en el paso elegido, en el mismo lugar y con la misma línea
+  const pick = useCallback((kind: Kind) => {
+    const picker = nodes.find((n) => n.id === PICKER);
+    if (!picker) return;
+    const { sourceId, handle } = picker.data as PickerData;
+    const id = `n${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+    setNodes((ns) => [
+      ...ns.filter((n) => n.id !== PICKER),
+      { id, type: "step", position: picker.position, data: { kind, config: defaultConfig(kind) } satisfies StepNodeData },
+    ]);
+    setEdges((es) => [
+      ...es.filter((e) => e.target !== PICKER && !(e.source === sourceId && (e.sourceHandle ?? "next") === handle)),
       { id: `${sourceId}:${handle}->${id}`, source: sourceId, sourceHandle: handle, target: id, type: "smoothstep" },
     ]);
     touch();
-    setPanel(kind === "rotator" || kind === "ai" ? null : { kind: "config", id });
-  }, [setNodes, setEdges, touch]);
+  }, [nodes, setNodes, setEdges, touch]);
+
+  // arrastrar desde una salida libre y soltar en el vacío abre la ventanita ahí mismo
+  const onConnectEnd = useCallback((event: MouseEvent | TouchEvent, state: FinalConnectionState) => {
+    if (!canEdit || state.isValid || !state.fromNode || state.fromHandle?.type !== "source") return;
+    const handle = state.fromHandle.id ?? "next";
+    if (edges.some((e) => e.source === state.fromNode!.id && (e.sourceHandle ?? "next") === handle)) return;
+    const pt = "changedTouches" in event ? event.changedTouches[0] : event;
+    const p = flow.screenToFlowPosition({ x: pt.clientX, y: pt.clientY });
+    openAdd(state.fromNode.id, handle, { x: p.x, y: p.y - 40 });
+  }, [canEdit, edges, flow, openAdd]);
 
   const removeNode = useCallback((id: string) => {
+    closePicker();
     const node = nodes.find((n) => n.id === id);
     if (!node) return;
     if (node.type === "note") {
@@ -98,8 +126,8 @@ function Editor({ automation, folders, runs, agents, isAdmin, tags, hooks }: Pro
       }
       if (doomed.size > 1 && !confirm(`Se eliminarán también los ${doomed.size - 1} pasos de sus ramas. ¿Continuar?`)) return;
     }
-    const incoming = edges.find((e) => e.target === id);
-    const next = data.kind === "condition" ? undefined : edges.find((e) => e.source === id && (e.sourceHandle ?? "next") === "next");
+    const incoming = edges.find((e) => e.target === id && e.source !== PICKER);
+    const next = data.kind === "condition" ? undefined : edges.find((e) => e.source === id && (e.sourceHandle ?? "next") === "next" && e.target !== PICKER);
     setNodes((ns) => ns.filter((n) => !doomed.has(n.id)));
     setEdges((es) => {
       const kept = es.filter((e) => !doomed.has(e.source) && !doomed.has(e.target));
@@ -109,9 +137,8 @@ function Editor({ automation, folders, runs, agents, isAdmin, tags, hooks }: Pro
       }
       return kept;
     });
-    setPanel(null);
     touch();
-  }, [nodes, edges, setNodes, setEdges, touch]);
+  }, [nodes, edges, setNodes, setEdges, touch, closePicker]);
 
   const onConnect = useCallback((c: Connection) => {
     if (!c.source || !c.target) return;
@@ -142,13 +169,14 @@ function Editor({ automation, folders, runs, agents, isAdmin, tags, hooks }: Pro
   };
 
   const ctx: FlowCtx = {
-    openAdd: (sourceId, handle) => setPanel({ kind: "add", sourceId, handle }),
+    openAdd: (sourceId, handle) => openAdd(sourceId, handle),
+    pick, closePicker,
     openTrigger: () => setPanel({ kind: "trigger" }),
-    select: (id) => setPanel({ kind: "config", id }),
+    setConfig,
     remove: removeNode,
     hasEdge: (s, h) => edges.some((e) => e.source === s && (e.sourceHandle ?? "next") === h),
     setNoteText: (id, text) => { setNodes((ns) => ns.map((n) => (n.id === id ? { ...n, data: { ...n.data, text } } : n))); touch(); },
-    agents, canEdit,
+    agents, orgId, canEdit,
   };
 
   // ───────── guardar ─────────
@@ -158,11 +186,12 @@ function Editor({ automation, folders, runs, agents, isAdmin, tags, hooks }: Pro
     const trig = nodes.find((n) => n.id === "trigger")!.data as TriggerData;
     if (!trig.set) problems.push("Asigna un disparador (pulsa «+ Nuevo disparador»).");
 
-    const { tree, orphans } = graphToTree(nodes, edges);
+    const realNodes = nodes.filter((n) => n.id !== PICKER);
+    const { tree, orphans } = graphToTree(realNodes, edges.filter((e) => e.target !== PICKER));
     if (tree.steps.length === 0) problems.push("Añade al menos un paso conectado al disparador.");
 
     const bad = new Set<string>();
-    const reachable = nodes.filter((n) => n.type === "step" && !orphans.includes(n.id));
+    const reachable = realNodes.filter((n) => n.type === "step" && !orphans.includes(n.id));
     for (const n of reachable) {
       const d = n.data as StepNodeData;
       const p = validateStep(d.kind, d.config);
@@ -207,7 +236,6 @@ function Editor({ automation, folders, runs, agents, isAdmin, tags, hooks }: Pro
     router.push("/automations");
   }
 
-  const selectedNode = panel?.kind === "config" ? nodes.find((n) => n.id === panel.id) : undefined;
   const trigData = nodes.find((n) => n.id === "trigger")?.data as TriggerData;
 
   return (
@@ -253,7 +281,8 @@ function Editor({ automation, folders, runs, agents, isAdmin, tags, hooks }: Pro
             nodes={nodes} edges={edges} nodeTypes={nodeTypes}
             onNodesChange={(c) => { onNodesChange(c); if (c.some((x) => x.type === "position" && x.dragging)) touch(); }}
             onEdgesChange={onEdgesChange} onConnect={onConnect} isValidConnection={isValidConnection}
-            onPaneClick={() => setPanel(null)}
+            onConnectEnd={onConnectEnd}
+            onPaneClick={() => { setPanel(null); if (nodes.some((n) => n.id === PICKER)) closePicker(); }}
             nodesDraggable={canEdit} nodesConnectable={canEdit}
             deleteKeyCode={null} fitView fitViewOptions={{ padding: 0.35, maxZoom: 1 }} minZoom={0.3} maxZoom={1.6}
             defaultEdgeOptions={{ type: "smoothstep", style: { stroke: "#94a3b8", strokeWidth: 2 } }}
@@ -263,13 +292,6 @@ function Editor({ automation, folders, runs, agents, isAdmin, tags, hooks }: Pro
             <MiniMap position="bottom-right" pannable zoomable ariaLabel="Mapa del flujo" />
           </ReactFlow>
 
-          {panel?.kind === "add" && canEdit && (
-            <AddPanel onClose={() => setPanel(null)} onPick={(k) => addNode(k, panel.sourceId, panel.handle)} />
-          )}
-          {panel?.kind === "config" && selectedNode?.type === "step" && (
-            <ConfigPanel key={selectedNode.id} data={selectedNode.data as StepNodeData} agents={agents} canEdit={canEdit}
-              onChange={(c) => setConfig(selectedNode.id, c)} onDelete={() => removeNode(selectedNode.id)} onClose={() => setPanel(null)} />
-          )}
           {panel?.kind === "runs" && <RunsPanel runs={runs} onClose={() => setPanel(null)} />}
         </FlowContext.Provider>
 

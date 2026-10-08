@@ -14,10 +14,12 @@ export type Tree = { steps: TreeStep[]; trigger_pos?: Pos; notes?: NoteData[] };
 export type TriggerData = { trigger_type: Trigger; conditions: Cfg; set: boolean; [k: string]: unknown };
 export type StepNodeData = { kind: Kind; config: Cfg; invalid?: boolean; [k: string]: unknown };
 export type NoteNodeData = { text: string; [k: string]: unknown };
+// ventanita temporal "¿Qué desea agregar?" unida con una línea al paso del que salió
+export type PickerData = { sourceId: string; handle: string; [k: string]: unknown };
 
-export const NODE_W = 280;
-const COL = 360;
-const ROW = 210;
+export const NODE_W = 380;
+const COL = 480;
+const ROW = 300;
 
 // ───────────── catálogo (panel "¿Qué desea agregar?") ─────────────
 export const META: Record<Kind, { label: string; icon: string; blurb: string }> = {
@@ -37,7 +39,8 @@ export type Unit = keyof typeof UNITS;
 export const UNIT_LABEL: Record<Unit, string> = { min: "minutos", h: "horas", d: "días" };
 
 export const defaultConfig = (k: Kind): Cfg =>
-  k === "wait" ? { amount: 5, unit: "min", minutes: 5 }
+  k === "send_message" ? { mode: "text", text: "" }
+  : k === "wait" ? { amount: 5, unit: "min", minutes: 5 }
   : k === "http_request" ? { method: "POST", url: "" }
   : k === "condition" ? { field: "message_contains", value: "" }
   : {};
@@ -45,7 +48,9 @@ export const defaultConfig = (k: Kind): Cfg =>
 // ───────────── resumen y validación de cada nodo ─────────────
 export function summary(kind: Kind, c: Cfg, agents: { id: string; name: string }[]): string | null {
   switch (kind) {
-    case "send_message": return String(c.text ?? "").trim() ? String(c.text) : null;
+    case "send_message":
+      if (c.media_path) return `📎 ${c.media_name ?? "archivo"}${String(c.text ?? "").trim() ? ` — ${c.text}` : ""}`;
+      return String(c.text ?? "").trim() ? String(c.text) : null;
     case "add_tag": return String(c.name ?? "").trim() ? `Etiqueta: ${c.name}` : null;
     case "move_stage": return String(c.stage_name ?? "").trim() ? `Mover a: ${c.stage_name}` : null;
     case "http_request": return String(c.url ?? "").trim() ? `${c.method ?? "POST"} ${c.url}` : null;
@@ -59,7 +64,9 @@ export function summary(kind: Kind, c: Cfg, agents: { id: string; name: string }
 
 export function validateStep(kind: Kind, c: Cfg): string | null {
   switch (kind) {
-    case "send_message": return String(c.text ?? "").trim() ? null : "escribe el mensaje";
+    case "send_message":
+      if (c.media_path) return null;
+      return (c.mode ?? "text") !== "text" ? "adjunta el archivo" : String(c.text ?? "").trim() ? null : "escribe el mensaje";
     case "add_tag": return String(c.name ?? "").trim() ? null : "indica la etiqueta";
     case "move_stage": return String(c.stage_name ?? "").trim() ? null : "indica la etapa";
     case "http_request": return /^https:\/\//i.test(String(c.url ?? "")) ? null : "la URL debe empezar por https://";
@@ -154,9 +161,9 @@ export function createsCycle(edges: Edge[], source: string, target: string): boo
 // Posición libre para un nodo nuevo a la derecha del padre (evita encimarse con otros)
 export function freeSpot(nodes: Node[], parent: Node | undefined, handle: string): Pos {
   const base = parent ?? { position: { x: 0, y: 0 } };
-  const dy = handle === "yes" ? -90 : handle === "no" ? 130 : 0;
+  const dy = handle === "yes" ? -120 : handle === "no" ? 160 : 0;
   const x = base.position.x + COL;
   let y = base.position.y + dy;
-  while (nodes.some((nd) => Math.abs(nd.position.x - x) < NODE_W && Math.abs(nd.position.y - y) < 150)) y += 170;
+  while (nodes.some((nd) => Math.abs(nd.position.x - x) < NODE_W && Math.abs(nd.position.y - y) < 230)) y += 250;
   return { x, y };
 }

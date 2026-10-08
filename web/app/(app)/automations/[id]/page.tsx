@@ -7,7 +7,7 @@ export default async function AutomationDetailPage({ params }: { params: { id: s
   const supabase = createClient();
   const { data: auth } = await supabase.auth.getUser();
   const [{ data: me }, { data: automation }, { data: folders }, { data: runs }, { data: team }, { data: tags }, { data: hooks }] = await Promise.all([
-    supabase.from("profiles").select("role").eq("id", auth.user?.id ?? "").maybeSingle(),
+    supabase.from("profiles").select("role, organization_id").eq("id", auth.user?.id ?? "").maybeSingle(),
     supabase.from("automations")
       .select("id, name, trigger_type, conditions, actions_tree_json, enabled, folder_id").eq("id", params.id).maybeSingle(),
     supabase.from("automation_folders").select("id, name").order("name"),
@@ -28,7 +28,7 @@ export default async function AutomationDetailPage({ params }: { params: { id: s
         automation={automation as unknown as Automation}
         folders={(folders ?? []) as Folder[]}
         runs={(runs ?? []) as unknown as RunWithLog[]}
-        agents={team ?? []} tags={(tags ?? []).map((t) => t.name)} hooks={hooks ?? []}
+        agents={team ?? []} orgId={me?.organization_id ?? ""} tags={(tags ?? []).map((t) => t.name)} hooks={hooks ?? []}
         isAdmin={me.role === "admin"}
       />
     </main>
