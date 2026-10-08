@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Icon } from "@/components/ui/Icon";
 import { Alert, btnOutline, btnPrimary, Field, inputCls, Modal, ModalActions, Notice, useMe } from "@/components/settings/kit";
 
-type Channel = { id: string; name: string; phone_number: string | null; provider: string; status: string; wa_type: "messenger" | "business"; groups: number };
+type Channel = { id: string; name: string; phone_number: string | null; provider: string; status: string; needs_reconnect: boolean; wa_type: "messenger" | "business"; groups: number };
 type Overview = {
   plan_name: string; contact_limit_hits: number; contacts: number; agents: number; devices: number;
   max_contacts: number | null; max_agents: number | null; max_devices: number | null; channels: Channel[];
@@ -44,7 +44,8 @@ const STATUS = {
   idle: { label: "Sin uso", cls: "text-slate-500" },
   off: { label: "Desconectado", cls: "text-red-500" },
 };
-const statusOf = (c: Channel) => (c.status === "connected" ? STATUS.connected : c.phone_number ? STATUS.off : STATUS.idle);
+const statusOf = (c: Channel) =>
+  c.status === "connected" ? STATUS.connected : c.needs_reconnect ? { label: "Requiere reconexión", cls: "text-red-600" } : c.phone_number ? STATUS.off : STATUS.idle;
 
 // ── conectar: elegir tipo → QR (Messenger) o info de Meta (Business)
 function ConnectFlow({ channel, onClose, onConnected }: { channel: Channel; onClose: () => void; onConnected: () => void }) {
@@ -245,11 +246,11 @@ export function ConnectionsClient() {
                   <p className="mt-1 text-sm text-indigo-600">{c.phone_number ?? "Sin registro"}</p>
                   <p className="mt-1 text-xs text-slate-500">{c.provider === "meta" ? "WhatsApp Business API" : c.wa_type === "business" ? "WhatsApp Business" : "WhatsApp Messenger"}</p>
                   <p className="mt-6 text-sm text-slate-500">Estado</p>
-                  <span className={`mt-1 rounded bg-slate-50 px-2 py-0.5 text-xs font-medium ${st.cls}`}>{st.label}</span>
+                  <span className={`mt-1 rounded px-2 py-0.5 text-xs font-medium ${c.needs_reconnect && c.status !== "connected" ? "bg-red-50" : "bg-slate-50"} ${st.cls}`}>{st.label}</span>
                   <div className="mt-auto pt-6">
                     {c.status === "connected"
                       ? <span className="inline-flex items-center gap-2 rounded-md bg-slate-50 px-5 py-2.5 text-sm font-semibold text-slate-700">Número conectado</span>
-                      : <button disabled={!isAdmin} onClick={() => setModal({ t: "connect", c })} className="inline-flex items-center gap-2 rounded-md bg-slate-50 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"><Icon name="phone" size={18} /> Conectar número</button>}
+                      : <button disabled={!isAdmin} onClick={() => setModal({ t: "connect", c })} className="inline-flex items-center gap-2 rounded-md bg-slate-50 px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"><Icon name="phone" size={18} /> {c.needs_reconnect ? "Reconectar número" : "Conectar número"}</button>}
                   </div>
                 </section>
               );

@@ -2,7 +2,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { tick } from "../_shared/engine.ts";
 import { aiRespond } from "../_shared/ai.ts";
-import { fetchIncomingMedia, type MediaType } from "../_shared/provider.ts";
+import { fetchIncomingMedia, sendText, type MediaType } from "../_shared/provider.ts";
 
 const admin = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -44,6 +44,42 @@ async function saveMedia(conversationId: string, channelId: string, keyId: strin
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
+// Motivos de cierre que exigen volver a vincular el número (WhatsApp cerró la sesión o la abrieron en otro lado)
+const RELINK_REASONS = new Set([401, 403, 440]);
+
+// Estado de la conexión del número. Solo avisa cuando pasa de "conectado" a "sesión cerrada" (no en cada reintento).
+async function onConnectionUpdate(ch: { id: string; organization_id: string; name: string; status: string }, d: any) {
+  const state = String(d?.state ?? "").toLowerCase();
+  const reason = Number(d?.statusReason ?? d?.statusCode ?? 0);
+
+  if (state === "open") {
+    await admin.from("channels").update({ status: "connected", needs_reconnect: false, disconnected_at: null }).eq("id", ch.id);
+    return json({ ok: true, state });
+  }
+  if (state !== "close") return json({ ok: true, ignored: state });
+
+  const relink = RELINK_REASONS.has(reason);
+  if (ch.status === "connected" && relink) {
+    await admin.from("channels").update({ status: "disconnected", needs_reconnect: true, disconnected_at: new Date().toISOString() }).eq("id", ch.id);
+    await alertAdmins(ch);
+  } // un cierre transitorio no cambia nada: WhatsApp se reconecta solo y, si no, lo corrige la sincronización de Conexiones
+  return json({ ok: true, state, relink });
+}
+
+// WhatsApp a los administradores (su "WhatsApp personal"), enviado desde otro número de la empresa que siga conectado
+async function alertAdmins(ch: { id: string; organization_id: string; name: string }) {
+  try {
+    const { data: admins } = await admin.from("profiles").select("whatsapp").eq("organization_id", ch.organization_id).eq("role", "admin").not("whatsapp", "is", null);
+    const { data: via } = await admin.from("channels").select("api_url, api_key, instance_name")
+      .eq("organization_id", ch.organization_id).eq("status", "connected").neq("id", ch.id).not("instance_name", "is", null).limit(1).maybeSingle();
+    if (!via || !admins?.length) return;
+    const text = `⚠️ Tu número "${ch.name}" se desconectó de WhatsApp. Entra al CRM → Conexiones y vuelve a vincularlo con el código QR para seguir recibiendo mensajes.`;
+    await Promise.allSettled(admins.map((a) => sendText(via, String(a.whatsapp), text)));
+  } catch (e) {
+    console.error("alerta", String(e));
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "method" }, 405);
   const url = new URL(req.url);
@@ -52,11 +88,12 @@ Deno.serve(async (req) => {
   if (!channelId || !secret) return json({ error: "unauthorized" }, 401);
 
   const { data: channel } = await admin
-    .from("channels").select("id, webhook_secret").eq("id", channelId).maybeSingle();
+    .from("channels").select("id, webhook_secret, organization_id, name, status").eq("id", channelId).maybeSingle();
   if (!channel || channel.webhook_secret !== secret) return json({ error: "unauthorized" }, 401);
 
   const body = await req.json().catch(() => null);
   const event = String(body?.event ?? "").toLowerCase().replace(/_/g, ".");
+  if (event === "connection.update") return await onConnectionUpdate(channel, body?.data);
   if (event !== "messages.upsert") return json({ ok: true, ignored: event });
 
   const data = Array.isArray(body.data) ? body.data[0] : body.data;

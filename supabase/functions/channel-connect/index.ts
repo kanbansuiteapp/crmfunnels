@@ -112,16 +112,19 @@ Deno.serve(async (req) => {
         const owner = String(info?.ownerJid ?? info?.instance?.owner ?? info?.number ?? "");
         const digits = owner.split("@")[0].replace(/\D/g, "");
         if (digits) phone = `+${digits}`;
-        await admin.from("channels").update({ status: "connected", phone_number: phone }).eq("id", ch.id);
+        await admin.from("channels").update({ status: "connected", phone_number: phone, needs_reconnect: false, disconnected_at: null }).eq("id", ch.id);
         return json({ ok: true, status: "connected", phone });
       }
-      await admin.from("channels").update({ status: "disconnected" }).eq("id", ch.id);
-      return json({ ok: true, status: "disconnected", phone: ch.phone_number });
+      // si estaba conectado y ya no lo está, la sesión se cayó: hay que volver a vincular
+      const dropped = ch.status === "connected";
+      await admin.from("channels").update({ status: "disconnected", ...(dropped ? { needs_reconnect: true, disconnected_at: new Date().toISOString() } : {}) }).eq("id", ch.id);
+      return json({ ok: true, status: "disconnected", phone: ch.phone_number, needs_reconnect: dropped });
     }
 
     if (action === "logout") {
+      // primero se marca como voluntaria: el evento de cierre que Evolution envía después no debe disparar una alerta
+      await admin.from("channels").update({ status: "disconnected", needs_reconnect: false }).eq("id", ch.id);
       if (ch.instance_name) await evo("DELETE", `/instance/logout/${ch.instance_name}`, ch.api_key!);
-      await admin.from("channels").update({ status: "disconnected" }).eq("id", ch.id);
       return json({ ok: true });
     }
 

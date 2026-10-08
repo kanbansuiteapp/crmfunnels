@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Sidebar } from "@/components/Sidebar";
 import { UserMenu } from "@/components/UserMenu";
+import { AlertsBar } from "@/components/AlertsBar";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
@@ -13,6 +14,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // sin perfil visible = empresa suspendida o usuario sin empresa
   if (!me) redirect("/account-suspended");
   const { data: isPlatform } = await supabase.rpc("is_platform_admin");
+  const { data: ov } = me.role === "admin" ? await supabase.rpc("connections_overview") : { data: null };
   const email = auth.user?.email ?? "";
 
   return (
@@ -22,6 +24,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <header className="flex h-14 shrink-0 items-center justify-end border-b bg-white px-4">
           <UserMenu name={me?.name || email} email={email} role={me?.role ?? "agent"} isPlatform={isPlatform === true} />
         </header>
+        <AlertsBar ov={ov} />
         <div className="min-h-0 flex-1 overflow-auto">{children}</div>
       </div>
     </div>
