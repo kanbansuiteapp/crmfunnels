@@ -29,6 +29,7 @@ const SOLID: Record<string, React.ReactNode> = {
   user: <g fill="currentColor" stroke="none"><circle cx="12" cy="7.5" r="4.5" /><path d="M3.5 22a8.5 8.5 0 0 1 17 0z" /></g>,
   users: <g fill="currentColor" stroke="none"><circle cx="12" cy="7" r="3.8" /><path d="M5.5 20a6.5 6.5 0 0 1 13 0z" /><circle cx="4.8" cy="9.5" r="2.5" /><path d="M0 19a5 5 0 0 1 6.2-4.6A8 8 0 0 0 4.6 19z" /><circle cx="19.2" cy="9.5" r="2.5" /><path d="M24 19a5 5 0 0 0-6.2-4.6A8 8 0 0 1 19.4 19z" /></g>,
   tools: <><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" strokeWidth="2.2" /></>,
+  phone: <path fillRule="evenodd" fill="currentColor" stroke="none" d="M8.5 1.5h7A2.5 2.5 0 0 1 18 4v16a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 6 20V4a2.5 2.5 0 0 1 2.5-2.5zM12 19.4a1.1 1.1 0 1 0 0-2.2 1.1 1.1 0 0 0 0 2.2z" />,
   pie: <g fill="currentColor" stroke="none"><path d="M12 2.2v9.8h9.8A9.8 9.8 0 0 0 12 2.2z" /><path d="M10 4.2A9.8 9.8 0 1 0 19.8 14H10z" /></g>,
   settings: LINE.settings,
 };
@@ -67,6 +68,7 @@ export function Sidebar({ pipelineId }: { pipelineId: string | null }) {
       ]
     : [
         { key: "home", icon: "home", label: "Inicio", href: "/dashboard" },
+        { key: "connections", icon: "phone", label: "Conexiones", href: "/connections" },
         {
           key: "1a1", icon: "user", label: "Interacciones 1 a 1", title: "Interacciones 1 a 1",
           items: [
