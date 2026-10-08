@@ -1,9 +1,16 @@
 export type Conversation = {
   id: string;
-  assignee_id: string | null;
+  status: "open" | "closed";
   ai_enabled: boolean;
+  assignee_id: string | null;
+  assignee_name: string | null;
   last_message_at: string;
-  contact: { id: string; name: string | null; phone_number: string } | null;
+  unread_count: number;
+  favorite: boolean;
+  contact: { id: string; name: string | null; phone_number: string };
+  channel: { id: string; name: string };
+  tags: { id: string; name: string; color: string }[];
+  last_message: { content: string | null; direction: "in" | "out"; by_ai: boolean; status: string } | null;
 };
 
 export type Message = {
@@ -17,3 +24,4 @@ export type Message = {
 };
 
 export type Member = { id: string; name: string };
+export type ChannelRef = { id: string; name: string };

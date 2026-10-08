@@ -1,53 +1,54 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { ChannelForm } from "./ChannelForm";
 import { ContactPanel } from "./ContactPanel";
-import type { Conversation, Member, Message } from "./types";
+import { ConversationList } from "./ConversationList";
+import type { ChannelRef, Conversation, Member, Message } from "./types";
 
 export function Inbox({
-  initialConversations,
-  hasChannels,
-  isAdmin,
-  team,
+  initialConversations, channels, isAdmin, meId, team,
 }: {
-  initialConversations: Conversation[];
-  hasChannels: boolean;
-  isAdmin: boolean;
-  team: Member[];
+  initialConversations: Conversation[]; channels: ChannelRef[]; isAdmin: boolean; meId: string; team: Member[];
 }) {
   const supabase = useMemo(() => createClient(), []);
   const [conversations, setConversations] = useState(initialConversations);
-  const [channelsOk, setChannelsOk] = useState(hasChannels);
-  const [selected, setSelected] = useState<string | null>(initialConversations[0]?.id ?? null);
+  const [channelsOk, setChannelsOk] = useState(channels.length > 0);
+  const [selected, setSelected] = useState<string | null>(null); // como en Funnelchat: nada abierto al entrar
   const [messages, setMessages] = useState<Message[]>([]);
   const [text, setText] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
+  const selectedRef = useRef<string | null>(null);
+  selectedRef.current = selected;
 
-  async function loadConversations() {
-    const { data } = await supabase
-      .from("conversations")
-      .select("id, assignee_id, ai_enabled, last_message_at, contact:contacts(id, name, phone_number)")
-      .order("last_message_at", { ascending: false });
-    if (data) setConversations(data as unknown as Conversation[]);
-  }
+  const loadConversations = useCallback(async () => {
+    const { data } = await supabase.rpc("inbox_conversations");
+    if (data) setConversations(data as Conversation[]);
+  }, [supabase]);
 
-  async function loadMessages(id: string) {
+  const loadMessages = useCallback(async (id: string) => {
     const { data } = await supabase
       .from("messages")
       .select("id, conversation_id, direction, content, by_ai, status, timestamp")
       .eq("conversation_id", id)
       .order("timestamp");
     if (data) setMessages(data as Message[]);
+  }, [supabase]);
+
+  // abrir un chat: se cargan sus mensajes y se marca como leído (también en pantalla, sin esperar)
+  async function open(id: string) {
+    setSelected(id);
+    setErr(null);
+    setConversations((cs) => cs.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c)));
+    await supabase.rpc("mark_conversation_read", { p_id: id });
   }
 
   useEffect(() => {
     if (selected) loadMessages(selected);
     else setMessages([]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected]);
+  }, [selected, loadMessages]);
 
   // Realtime: mensajes nuevos y cambios de conversación
   useEffect(() => {
@@ -55,18 +56,21 @@ export function Inbox({
       .channel("inbox")
       .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, (p) => {
         const row = (p.new ?? {}) as Message;
-        if (row.conversation_id && row.conversation_id === selected) loadMessages(selected);
+        const open = selectedRef.current;
+        if (open && row.conversation_id === open) {
+          loadMessages(open);
+          // si llega un mensaje con el chat abierto, no se acumula como no leído
+          if (row.direction === "in") supabase.rpc("mark_conversation_read", { p_id: open }).then(() => loadConversations());
+          return;
+        }
         loadConversations();
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () =>
-        loadConversations()
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => loadConversations())
       .subscribe();
     return () => {
       supabase.removeChannel(ch);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supabase, selected]);
+  }, [supabase, loadConversations, loadMessages]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth" });
@@ -74,22 +78,33 @@ export function Inbox({
 
   const current = conversations.find((c) => c.id === selected) ?? null;
 
-  async function reassign(assigneeId: string) {
-    if (!selected) return;
-    const { error } = await supabase
-      .from("conversations")
-      .update({ assignee_id: assigneeId || null })
-      .eq("id", selected);
+  async function patchConversation(patch: Record<string, unknown>) {
+    if (!current) return;
+    const { error } = await supabase.from("conversations").update(patch).eq("id", current.id);
     if (error) setErr(error.message);
     loadConversations();
   }
 
-  async function toggleAi() {
-    if (!current) return;
-    const { error } = await supabase
-      .from("conversations").update({ ai_enabled: !current.ai_enabled }).eq("id", current.id);
+  async function toggleFavorite(id: string) {
+    setConversations((cs) => cs.map((c) => (c.id === id ? { ...c, favorite: !c.favorite } : c)));
+    const { error } = await supabase.rpc("toggle_favorite", { p_conversation: id });
     if (error) setErr(error.message);
     loadConversations();
+  }
+
+  async function markAllRead() {
+    setConversations((cs) => cs.map((c) => ({ ...c, unread_count: 0 })));
+    const { error } = await supabase.rpc("mark_all_read");
+    if (error) setErr(error.message);
+    loadConversations();
+  }
+
+  async function startConversation(channel: string, phone: string, name: string): Promise<string | null> {
+    const { data, error } = await supabase.rpc("start_conversation", { p_channel: channel, p_phone: phone, p_name: name });
+    if (error) return error.message;
+    await loadConversations();
+    open(data as string);
+    return null;
   }
 
   async function send(e: React.FormEvent) {
@@ -106,89 +121,74 @@ export function Inbox({
     loadMessages(selected);
   }
 
-  if (!channelsOk)
-    return <ChannelForm onCreated={() => setChannelsOk(true)} />;
+  if (!channelsOk) return <ChannelForm onCreated={() => setChannelsOk(true)} />;
 
+  const name = current ? current.contact.name ?? current.contact.phone_number : "";
   return (
-    <div className="flex min-h-0 flex-1 gap-3">
-      <aside className="w-72 shrink-0 overflow-y-auto rounded-xl border bg-white">
-        {conversations.length === 0 && (
-          <p className="p-4 text-sm text-slate-500">Aún no hay conversaciones.</p>
-        )}
-        {conversations.map((c) => (
-          <button
-            key={c.id}
-            onClick={() => setSelected(c.id)}
-            className={`block w-full border-b px-3 py-2 text-left hover:bg-slate-50 ${
-              selected === c.id ? "bg-sky-50" : ""
-            }`}
-          >
-            <p className="text-sm font-medium">{c.contact?.name ?? c.contact?.phone_number}</p>
-            <p className="text-xs text-slate-500">{c.contact?.phone_number}</p>
-          </button>
-        ))}
-      </aside>
+    <div className="flex h-full min-h-0 gap-3">
+      <ConversationList
+        conversations={conversations} selected={selected} meId={meId} team={team} channels={channels}
+        onSelect={open} onToggleFavorite={toggleFavorite} onMarkAllRead={markAllRead} onNew={startConversation}
+      />
 
       <section className="flex min-w-0 flex-1 flex-col rounded-xl border bg-white">
-        {current && (
-          <div className="flex items-center gap-3 border-b px-4 py-2 text-sm">
-            {isAdmin && (
-              <>
-                <label htmlFor="assignee" className="text-slate-600">Asignado a</label>
-                <select
-                  id="assignee"
-                  value={current.assignee_id ?? ""}
-                  onChange={(e) => reassign(e.target.value)}
-                  className="rounded border px-2 py-1"
-                >
-                  <option value="">Sin asignar</option>
-                  {team.map((m) => (
-                    <option key={m.id} value={m.id}>{m.name}</option>
-                  ))}
-                </select>
-              </>
-            )}
-            <button
-              onClick={toggleAi}
-              className={`ml-auto rounded px-3 py-1 text-xs font-medium ${
-                current.ai_enabled ? "bg-violet-100 text-violet-800" : "bg-slate-100 text-slate-600"
-              }`}
-            >
-              🤖 IA {current.ai_enabled ? "activa" : "pausada"}
-            </button>
+        {!current ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 text-slate-400">
+            <span className="text-5xl" aria-hidden>💬</span>
+            <p className="text-lg font-semibold text-slate-500">CRM</p>
+            <p className="text-sm">Seleccione una conversación para iniciar</p>
           </div>
-        )}
-        <div className="flex-1 space-y-2 overflow-y-auto p-4">
-          {messages.map((m) => (
-            <div key={m.id} className={`flex ${m.direction === "out" ? "justify-end" : ""}`}>
-              <div
-                className={`max-w-[70%] rounded-lg px-3 py-2 text-sm ${
-                  m.direction === "out" ? "bg-sky-600 text-white" : "bg-slate-100"
-                }`}
-              >
-                {m.by_ai && <span className="mr-1" title="Respuesta de la IA">🤖</span>}
-                {m.content}
-                {m.status === "failed" && <span className="ml-2 text-xs opacity-80">⚠ no enviado</span>}
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-3 border-b px-4 py-2 text-sm">
+              <div className="min-w-0">
+                <p className="truncate font-semibold">{name}</p>
+                <p className="text-xs text-slate-500">{current.contact.phone_number} · {current.channel.name}</p>
               </div>
+              {isAdmin && (
+                <label className="ml-4 flex items-center gap-2 text-slate-600">
+                  Asignado a
+                  <select value={current.assignee_id ?? ""} onChange={(e) => patchConversation({ assignee_id: e.target.value || null })}
+                    className="rounded border px-2 py-1">
+                    <option value="">Sin asignar</option>
+                    {team.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+                  </select>
+                </label>
+              )}
+              <span className="ml-auto flex gap-2">
+                <button onClick={() => patchConversation({ ai_enabled: !current.ai_enabled })}
+                  className={`rounded px-3 py-1 text-xs font-medium ${current.ai_enabled ? "bg-violet-100 text-violet-800" : "bg-slate-100 text-slate-600"}`}>
+                  🤖 IA {current.ai_enabled ? "activa" : "pausada"}
+                </button>
+                <button onClick={() => patchConversation({ status: current.status === "open" ? "closed" : "open" })}
+                  className="rounded border px-3 py-1 text-xs font-medium text-slate-700">
+                  {current.status === "open" ? "Cerrar conversación" : "Reabrir"}
+                </button>
+              </span>
             </div>
-          ))}
-          <div ref={bottom} />
-        </div>
-        {err && <p className="px-4 text-sm text-red-600" role="alert">{err}</p>}
-        <form onSubmit={send} className="flex gap-2 border-t p-3">
-          <input
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            disabled={!selected}
-            placeholder="Escribe un mensaje…"
-            className="flex-1 rounded border px-3 py-2 text-sm"
-          />
-          <button disabled={!selected} className="rounded bg-sky-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
-            Enviar
-          </button>
-        </form>
+            <div className="flex-1 space-y-2 overflow-y-auto p-4">
+              {messages.length === 0 && <p className="text-center text-sm text-slate-400">Aún no hay mensajes. Escribe el primero.</p>}
+              {messages.map((m) => (
+                <div key={m.id} className={`flex ${m.direction === "out" ? "justify-end" : ""}`}>
+                  <div className={`max-w-[70%] rounded-lg px-3 py-2 text-sm ${m.direction === "out" ? "bg-sky-600 text-white" : "bg-slate-100"}`}>
+                    {m.by_ai && <span className="mr-1" title="Respuesta de la IA">🤖</span>}
+                    {m.content}
+                    {m.status === "failed" && <span className="ml-2 text-xs opacity-80">⚠ no enviado</span>}
+                  </div>
+                </div>
+              ))}
+              <div ref={bottom} />
+            </div>
+            {err && <p className="px-4 text-sm text-red-600" role="alert">{err}</p>}
+            <form onSubmit={send} className="flex gap-2 border-t p-3">
+              <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Escribe un mensaje…"
+                className="flex-1 rounded border px-3 py-2 text-sm" />
+              <button className="rounded bg-sky-600 px-4 py-2 text-sm font-medium text-white">Enviar</button>
+            </form>
+          </>
+        )}
       </section>
-      {current?.contact && <ContactPanel key={current.contact.id} contactId={current.contact.id} />}
+      {current && <ContactPanel key={current.contact.id} contactId={current.contact.id} />}
     </div>
   );
 }
