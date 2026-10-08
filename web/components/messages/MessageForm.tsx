@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { Icon } from "@/components/ui/Icon";
 
 export type Target = { id: string; name: string; type: "group" | "community" | "channel"; participants: number };
 export type CampaignOpt = { id: string; name: string; groups: number };
@@ -16,15 +17,15 @@ type Block = {
   evTitle: string; evAt: string; evPlace: string;
 };
 
-const TYPES: { v: BType; label: string; icon: string; title: string }[] = [
-  { v: "text", label: "Mensaje", icon: "💬", title: "Enviar mensaje" },
-  { v: "audio", label: "Audio", icon: "🎙", title: "Enviar audio" },
-  { v: "document", label: "Documento", icon: "📄", title: "Enviar documento" },
-  { v: "media", label: "Imagen/Video", icon: "🖼", title: "Enviar imagen o video" },
-  { v: "link", label: "Link", icon: "🔗", title: "Enviar link" },
-  { v: "poll", label: "Encuesta", icon: "📋", title: "Enviar encuesta" },
-  { v: "contact", label: "Contacto", icon: "👤", title: "Enviar contacto" },
-  { v: "event", label: "Evento", icon: "🗓", title: "Enviar evento" },
+const TYPES: { v: BType; label: string; icon: React.ComponentProps<typeof Icon>["name"]; title: string }[] = [
+  { v: "text", label: "Mensaje", icon: "chat", title: "Enviar mensaje" },
+  { v: "audio", label: "Audio", icon: "mic", title: "Enviar audio" },
+  { v: "document", label: "Documento", icon: "file", title: "Enviar documento" },
+  { v: "media", label: "Imagen/Video", icon: "image", title: "Enviar imagen o video" },
+  { v: "link", label: "Link", icon: "link", title: "Enviar link" },
+  { v: "poll", label: "Encuesta", icon: "clipboard", title: "Enviar encuesta" },
+  { v: "contact", label: "Contacto", icon: "user", title: "Enviar contacto" },
+  { v: "event", label: "Evento", icon: "calendar", title: "Enviar evento" },
 ];
 const MAX_BLOCKS = 3;
 const EMOJIS = ["😀", "😊", "😉", "😍", "🙏", "👍", "👋", "🎉", "🔥", "✅", "⭐", "💬", "🎁", "💡", "❤️", "🚀"];
@@ -245,7 +246,7 @@ export function MessageForm({ orgId, targets, campaigns }: { orgId: string; targ
           <Link href="/calendar" className="text-base text-slate-700 hover:text-slate-900">← Regresar</Link>
           <h1 className="mt-3 text-3xl font-bold text-slate-900">Crear mensaje programado</h1>
         </div>
-        <button type="button" onClick={() => setPreview(true)} className="rounded-full border border-slate-300 bg-white px-5 py-2.5 text-base font-medium shadow-sm hover:bg-slate-50">👁 Vista previa</button>
+        <button type="button" onClick={() => setPreview(true)} className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-2.5 text-base font-medium shadow-sm hover:bg-slate-50"><Icon name="eye" size={18} /> Vista previa</button>
       </div>
 
       <div className="mt-6 grid items-start gap-8 xl:grid-cols-2">
@@ -311,7 +312,7 @@ export function MessageForm({ orgId, targets, campaigns }: { orgId: string; targ
 
           <div className="border-t pt-5">
             <div className="flex items-center justify-between gap-4">
-              <span className="flex items-center gap-2 text-lg font-semibold text-slate-900">🔁 Repetir mensaje
+              <span className="flex items-center gap-2 text-lg font-semibold text-slate-900"><Icon name="repeat" size={20} /> Repetir mensaje
                 <span title="El mensaje se volverá a enviar con la frecuencia que elijas, hasta el criterio de finalización" className="flex h-5 w-5 cursor-help items-center justify-center rounded-full border border-slate-400 text-xs font-normal text-slate-500">i</span></span>
               <Switch on={rep.on} label="Repetir mensaje" onChange={(v) => setRep({ ...rep, on: v })} />
             </div>
@@ -354,14 +355,14 @@ export function MessageForm({ orgId, targets, campaigns }: { orgId: string; targ
             {TYPES.map((t) => (
               <button key={t.v} type="button" disabled={blocks.length >= MAX_BLOCKS} onClick={() => setBlocks([...blocks, newBlock(t.v)])}
                 className="flex flex-col items-center gap-1 rounded-xl border border-slate-200 bg-white px-1 py-3 text-sm text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40">
-                <span className="text-xl" aria-hidden>{t.icon}</span>{t.label}
+                <Icon name={t.icon} size={24} />{t.label}
               </button>
             ))}
           </div>
 
           {blocks.length === 0 ? (
             <div className="mt-4 flex h-56 flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 text-slate-600">
-              <span className="mb-3 text-5xl text-slate-300" aria-hidden>📄</span>Ningún mensaje seleccionado
+              <Icon name="file" size={52} className="mb-3 text-slate-300" />Ningún mensaje seleccionado
             </div>
           ) : (
             <div className="mt-4 space-y-4">
@@ -376,8 +377,8 @@ export function MessageForm({ orgId, targets, campaigns }: { orgId: string; targ
                       <h3 className="flex-1 text-lg font-semibold text-slate-900">{meta.title}</h3>
                       <button type="button" aria-label="Subir" disabled={i === 0} onClick={() => move(b.id, -1)} className="px-1 text-slate-500 disabled:opacity-30">↑</button>
                       <button type="button" aria-label="Bajar" disabled={i === blocks.length - 1} onClick={() => move(b.id, 1)} className="px-1 text-slate-500 disabled:opacity-30">↓</button>
-                      <button type="button" aria-label={b.open ? "Contraer" : "Expandir"} aria-expanded={b.open} onClick={() => patch(b.id, { open: !b.open })} className="px-1 text-slate-500">{b.open ? "⌃" : "⌄"}</button>
-                      <button type="button" aria-label="Eliminar mensaje" onClick={() => removeBlock(b.id)} className="px-1 text-slate-500 hover:text-red-600">🗑</button>
+                      <button type="button" aria-label={b.open ? "Contraer" : "Expandir"} aria-expanded={b.open} onClick={() => patch(b.id, { open: !b.open })} className="px-1 text-slate-500"><Icon name={b.open ? "up" : "down"} size={18} /></button>
+                      <button type="button" aria-label="Eliminar mensaje" onClick={() => removeBlock(b.id)} className="px-1 text-slate-500 hover:text-red-600"><Icon name="trash" size={18} /></button>
                     </header>
                     {b.open && (
                       <div className="space-y-4 p-4">
@@ -390,7 +391,7 @@ export function MessageForm({ orgId, targets, campaigns }: { orgId: string; targ
                               </div>
                             ) : (
                               <label className="flex cursor-pointer flex-col items-center gap-1 rounded-xl border-2 border-dotted border-indigo-300 px-4 py-6 text-center text-base text-indigo-700 hover:bg-indigo-50">
-                                <span className="text-2xl" aria-hidden>{meta.icon}</span>{busy === b.id ? "Subiendo…" : b.type === "audio" ? "Subir audio" : b.type === "document" ? "Subir documento" : "Subir imagen o video"}
+                                <Icon name={meta.icon} size={28} />{busy === b.id ? "Subiendo…" : b.type === "audio" ? "Subir audio" : b.type === "document" ? "Subir documento" : "Subir imagen o video"}
                                 <span className="text-xs text-slate-500">Máx. 16 MB</span>
                                 <input type="file" hidden disabled={busy === b.id} accept={b.type === "audio" ? "audio/*" : b.type === "media" ? "image/*,video/*" : undefined}
                                   onChange={(e) => { upload(b.id, b.type === "audio" ? "audio" : b.type === "media" ? "image" : "any", e.target.files?.[0]); e.target.value = ""; }} />
@@ -458,7 +459,7 @@ export function MessageForm({ orgId, targets, campaigns }: { orgId: string; targ
                               <input type="checkbox" checked={b.mention_all} onChange={(e) => patch(b.id, { mention_all: e.target.checked })} className="mt-1 h-5 w-5" />
                               <span><span className="block text-base text-slate-900">@ Mencionar a todos</span><span className="text-sm text-slate-500">Mejora la visibilidad notificando a todos los participantes</span></span>
                             </label>
-                            <div className="flex items-center justify-between"><span className="text-base font-medium text-slate-900">📌 Fijar mensaje</span><Switch on={b.pin} label="Fijar mensaje" onChange={(v) => patch(b.id, { pin: v })} /></div>
+                            <div className="flex items-center justify-between"><span className="flex items-center gap-2 text-base font-medium text-slate-900"><Icon name="pin" size={18} /> Fijar mensaje</span><Switch on={b.pin} label="Fijar mensaje" onChange={(v) => patch(b.id, { pin: v })} /></div>
                             {b.pin && (
                               <div className="pl-7">
                                 <p className="mb-2 text-sm text-slate-600">Duración</p>

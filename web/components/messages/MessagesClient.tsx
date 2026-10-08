@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Icon } from "@/components/ui/Icon";
 import { createClient } from "@/lib/supabase/client";
 
 type St = "scheduled" | "sending" | "done" | "failed" | "cancelled";
@@ -215,8 +216,8 @@ export function MessagesClient({ items, isAdmin }: { items: GroupMessage[]; isAd
         <input type="search" aria-label="Buscar por nombre" placeholder="Buscar por nombre" value={q} onChange={(e) => setQ(e.target.value)}
           className="w-full max-w-md rounded-full border border-slate-300 bg-white px-5 py-3 text-base text-slate-900" />
         <div className="relative flex gap-3" ref={box}>
-          {!calendar && <button onClick={() => setMenu(menu === "cols" ? null : "cols")} className="rounded-full border border-slate-300 bg-white px-5 py-3 text-base shadow-sm">▥ Columnas</button>}
-          <button onClick={() => setMenu(menu === "filter" ? null : "filter")} className="rounded-full border border-slate-300 bg-white px-5 py-3 text-base shadow-sm">⏷ Filtrar</button>
+          {!calendar && <button onClick={() => setMenu(menu === "cols" ? null : "cols")} className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-3 text-base shadow-sm"><Icon name="columns" /> Columnas</button>}
+          <button onClick={() => setMenu(menu === "filter" ? null : "filter")} className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-3 text-base shadow-sm"><Icon name="filter" /> Filtrar</button>
           <button onClick={() => { setCalendar((v) => !v); setMenu(null); }} aria-label={calendar ? "Ver lista" : "Ver calendario"} title={calendar ? "Ver lista" : "Ver calendario"}
             className="flex h-[50px] w-[50px] items-center justify-center rounded-full border border-slate-300 bg-white text-slate-800 shadow-sm hover:bg-slate-50"><LineIcon kind={calendar ? "list" : "calendar"} /></button>
           {menu === "cols" && !calendar && (
@@ -277,8 +278,8 @@ export function MessagesClient({ items, isAdmin }: { items: GroupMessage[]; isAd
                   {cols.read && <td className="px-5 py-3"><Ring value={m.read_rate} /></td>}
                   {cols.status && <td className="px-5 py-4"><span className={`rounded-md px-3 py-1 text-base font-medium ${STATUS[m.status].cls}`}>{STATUS[m.status].label}</span></td>}
                   <td className="whitespace-nowrap px-5 py-4 text-right text-slate-600">
-                    <button aria-label={`Ver ${m.name}`} title="Ver" className="mr-4 hover:text-slate-900" onClick={() => setView(m)}>👁</button>
-                    {isAdmin && <button aria-label={`Eliminar ${m.name}`} title="Eliminar" className="hover:text-red-600" onClick={() => remove([m.id])}>🗑</button>}
+                    <button aria-label={`Ver ${m.name}`} title="Ver" className="mr-4 hover:text-slate-900" onClick={() => setView(m)}><Icon name="eye" /></button>
+                    {isAdmin && <button aria-label={`Eliminar ${m.name}`} title="Eliminar" className="hover:text-red-600" onClick={() => remove([m.id])}><Icon name="trash" /></button>}
                   </td>
                 </tr>
               ))}

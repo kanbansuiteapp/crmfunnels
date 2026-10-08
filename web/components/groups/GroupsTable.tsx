@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Icon } from "@/components/ui/Icon";
 import { createClient } from "@/lib/supabase/client";
 import { ImportDialog, type Device } from "./ImportDialog";
 
@@ -126,7 +127,7 @@ export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; d
           <p className="text-base text-slate-600">{groups.length} registros en total</p>
         </div>
         {isAdmin && (
-          <button onClick={() => setImportOpen(true)} className="shrink-0 rounded-full bg-slate-900 px-6 py-3 text-base font-medium text-white hover:bg-slate-700">⇪ Importar</button>
+          <button onClick={() => setImportOpen(true)} className="inline-flex shrink-0 items-center gap-2 rounded-full bg-slate-900 px-6 py-3 text-base font-medium text-white hover:bg-slate-700"><Icon name="upload" /> Importar</button>
         )}
       </div>
 
@@ -134,8 +135,8 @@ export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; d
         <input type="search" aria-label="Buscar por nombre" placeholder="Buscar por nombre..." value={q} onChange={(e) => setQ(e.target.value)}
           className="w-full max-w-md rounded-full border border-slate-300 bg-white px-5 py-3 text-base text-slate-900" />
         <div className="relative flex gap-3" ref={box}>
-          <button onClick={() => setMenu(menu === "cols" ? null : "cols")} className="rounded-full border border-slate-300 bg-white px-5 py-3 text-base text-slate-900 shadow-sm">▥ Columnas</button>
-          <button onClick={() => setMenu(menu === "filter" ? null : "filter")} className="rounded-full border border-slate-300 bg-white px-5 py-3 text-base text-slate-900 shadow-sm">⏷ Filtrar</button>
+          <button onClick={() => setMenu(menu === "cols" ? null : "cols")} className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-3 text-base text-slate-900 shadow-sm"><Icon name="columns" /> Columnas</button>
+          <button onClick={() => setMenu(menu === "filter" ? null : "filter")} className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-3 text-base text-slate-900 shadow-sm"><Icon name="filter" /> Filtrar</button>
           {menu === "cols" && (
             <ul className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl border bg-white py-2 shadow-lg">
               {COLS.map((c) => (
@@ -216,7 +217,7 @@ export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; d
                 {visible.map((c) => <td key={c.key} className="whitespace-nowrap px-5 py-4 text-slate-800">{cell(g, c.key)}</td>)}
                 <td className="relative px-4 py-3 text-right" data-rowmenu>
                   <button aria-label={`Acciones de ${g.name}`} aria-haspopup="menu" aria-expanded={rowMenu === g.id}
-                    onClick={() => setRowMenu(rowMenu === g.id ? null : g.id)} className="px-2 text-lg leading-none text-slate-500 hover:text-slate-900">···</button>
+                    onClick={() => setRowMenu(rowMenu === g.id ? null : g.id)} className="px-2 text-lg leading-none text-slate-500 hover:text-slate-900"><Icon name="more" size={22} /></button>
                   {rowMenu === g.id && (
                     <ul role="menu" className="absolute right-4 top-full z-20 w-44 rounded-xl border bg-white py-1 text-left text-sm shadow-lg">
                       {g.invite_link && (

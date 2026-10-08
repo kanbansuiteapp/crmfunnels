@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Icon } from "@/components/ui/Icon";
 import { createClient } from "@/lib/supabase/client";
 
 export type GroupLite = { id: string; name: string; type: "group" | "community" | "channel"; participants: number; admins: number; capacity: number | null; avatar_url: string | null; connected: boolean };
@@ -74,7 +75,7 @@ export function CampaignsClient({ campaigns, isAdmin }: { campaigns: Campaign[];
         return (
           <span className="flex items-center gap-3">
             <span className="max-w-[170px] truncate">{link(c)}</span>
-            <button aria-label="Copiar enlace" title="Copiar enlace" onClick={() => navigator.clipboard?.writeText(link(c))} className="text-slate-600 hover:text-slate-900">⧉</button>
+            <button aria-label="Copiar enlace" title="Copiar enlace" onClick={() => navigator.clipboard?.writeText(link(c))} className="text-slate-600 hover:text-slate-900"><Icon name="copy" size={18} /></button>
           </span>
         );
       case "groups": return c.groups.length;
@@ -107,8 +108,8 @@ export function CampaignsClient({ campaigns, isAdmin }: { campaigns: Campaign[];
         <input type="search" aria-label="Buscar por nombre" placeholder="Buscar por nombre..." value={q} onChange={(e) => setQ(e.target.value)}
           className="w-full max-w-md rounded-full border border-slate-300 bg-white px-5 py-3 text-base text-slate-900" />
         <div className="relative flex gap-3" ref={box}>
-          <button onClick={() => setMenu(menu === "cols" ? null : "cols")} className="rounded-full border border-slate-300 bg-white px-5 py-3 text-base shadow-sm">▥ Columnas</button>
-          <button onClick={() => setMenu(menu === "filter" ? null : "filter")} className="rounded-full border border-slate-300 bg-white px-5 py-3 text-base shadow-sm">⏷ Filtrar</button>
+          <button onClick={() => setMenu(menu === "cols" ? null : "cols")} className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-3 text-base shadow-sm"><Icon name="columns" /> Columnas</button>
+          <button onClick={() => setMenu(menu === "filter" ? null : "filter")} className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-3 text-base shadow-sm"><Icon name="filter" /> Filtrar</button>
           {menu === "cols" && (
             <ul className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl border bg-white py-2 shadow-lg">
               {COLS.map((c) => (
@@ -160,11 +161,11 @@ export function CampaignsClient({ campaigns, isAdmin }: { campaigns: Campaign[];
                 </td>
                 {visible.map((k) => <td key={k.key} className="whitespace-nowrap px-5 py-4 text-slate-800">{cell(c, k.key)}</td>)}
                 <td className="whitespace-nowrap px-5 py-4 text-right text-slate-600">
-                  <button aria-label={`Ver ${c.name}`} title="Ver" className="mr-4 hover:text-slate-900" onClick={() => setView(c)}>👁</button>
+                  <button aria-label={`Ver ${c.name}`} title="Ver" className="mr-4 hover:text-slate-900" onClick={() => setView(c)}><Icon name="eye" /></button>
                   {isAdmin && (
                     <>
-                      <Link aria-label={`Editar ${c.name}`} title="Editar" className="mr-4 hover:text-slate-900" href={`/group-campaigns/${c.id}/edit`}>✎</Link>
-                      <button aria-label={`Eliminar ${c.name}`} title="Eliminar" className="hover:text-red-600" onClick={() => remove(c)}>🗑</button>
+                      <Link aria-label={`Editar ${c.name}`} title="Editar" className="mr-4 hover:text-slate-900" href={`/group-campaigns/${c.id}/edit`}><Icon name="pencil" /></Link>
+                      <button aria-label={`Eliminar ${c.name}`} title="Eliminar" className="hover:text-red-600" onClick={() => remove(c)}><Icon name="trash" /></button>
                     </>
                   )}
                 </td>
