@@ -43,7 +43,7 @@ export async function aiRespond(db: Db, conversationId: string): Promise<void> {
     .select("api_url, api_key, instance_name, ai_agent_id").eq("id", conv.channel_id).single();
   if (!ch?.ai_agent_id) return;
   const { data: agent } = await db.from("ai_agents").select("*").eq("id", ch.ai_agent_id).single();
-  if (!agent?.api_key) return;
+  if (!agent?.api_key || agent.active === false) return;
 
   const since = new Date(Date.now() - 3_600_000).toISOString();
   const { count } = await db.from("messages").select("id", { count: "exact", head: true })
