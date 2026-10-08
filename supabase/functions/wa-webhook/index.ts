@@ -1,5 +1,6 @@
 // Webhook de Evolution API: POST /wa-webhook?channel=<id>&secret=<webhook_secret>
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { tick } from "../_shared/engine.ts";
 
 const admin = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -44,5 +45,10 @@ Deno.serve(async (req) => {
     p_media_url: null,
   });
   if (error) return json({ error: error.message }, 500);
+
+  // dispara las automatizaciones sin bloquear la respuesta al proveedor
+  const bg = tick(admin, 10).catch((e) => console.error(e));
+  // @ts-ignore EdgeRuntime existe en el runtime de Supabase
+  if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(bg); else await bg;
   return json({ ok: true });
 });
