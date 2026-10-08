@@ -158,6 +158,26 @@ async function runAction(db: Db, step: Step, contact: any, run: any): Promise<st
       if (error) throw new Error(error.message);
       return `etiqueta ${cfg.name}`;
     }
+    case "assign": {
+      if (!cfg.agent_id) throw new Error("falta elegir el agente");
+      const conv = await ensureConversation(db, contact);
+      const { error } = await db.from("conversations").update({ assignee_id: cfg.agent_id }).eq("id", conv.id);
+      if (error) throw new Error(error.message);
+      return "conversación asignada";
+    }
+    case "rotator": {
+      const conv = await ensureConversation(db, contact);
+      const { error } = await db.rpc("assign_round_robin", { p_conversation: conv.id });
+      if (error) throw new Error(error.message);
+      return "asignada por rotación";
+    }
+    case "ai": {
+      // activa el asistente de IA que tenga el canal de la conversación
+      const conv = await ensureConversation(db, contact);
+      const { error } = await db.from("conversations").update({ ai_enabled: true }).eq("id", conv.id);
+      if (error) throw new Error(error.message);
+      return "IA activada";
+    }
     case "move_stage":
       return await moveStage(db, contact, cfg);
     case "http_request":

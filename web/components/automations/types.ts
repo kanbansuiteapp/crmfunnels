@@ -1,5 +1,5 @@
 export type Step = {
-  type: "send_message" | "add_tag" | "move_stage" | "http_request" | "wait" | "condition";
+  type: "send_message" | "add_tag" | "move_stage" | "http_request" | "wait" | "condition" | "assign" | "rotator" | "ai";
   config: Record<string, string | number>;
   then?: Step[];
   else?: Step[];
@@ -38,6 +38,9 @@ export const STEP_LABELS: Record<Step["type"], string> = {
   http_request: "Petición HTTP",
   wait: "Esperar",
   condition: "Condición",
+  assign: "Asignar conversación",
+  rotator: "Rotador",
+  ai: "Asignar asistente de IA",
 };
 
 export type Folder = { id: string; name: string };
