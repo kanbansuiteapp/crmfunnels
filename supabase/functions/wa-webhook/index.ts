@@ -1,6 +1,7 @@
 // Webhook de Evolution API: POST /wa-webhook?channel=<id>&secret=<webhook_secret>
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { tick } from "../_shared/engine.ts";
+import { aiRespond } from "../_shared/ai.ts";
 
 const admin = createClient(
   Deno.env.get("SUPABASE_URL")!,
@@ -37,7 +38,7 @@ Deno.serve(async (req) => {
   const media = m.imageMessage ? "[imagen]" : m.audioMessage ? "[audio]" : m.documentMessage ? "[documento]" : null;
   if (!content && !media) return json({ ok: true, ignored: "empty" });
 
-  const { error } = await admin.rpc("ingest_message", {
+  const { data: conversationId, error } = await admin.rpc("ingest_message", {
     p_channel_id: channel.id,
     p_phone: jid.split("@")[0],
     p_name: data.pushName ?? null,
@@ -47,7 +48,7 @@ Deno.serve(async (req) => {
   if (error) return json({ error: error.message }, 500);
 
   // dispara las automatizaciones sin bloquear la respuesta al proveedor
-  const bg = tick(admin, 10).catch((e) => console.error(e));
+  const bg = Promise.allSettled([tick(admin, 10), aiRespond(admin, conversationId as string)]);
   // @ts-ignore EdgeRuntime existe en el runtime de Supabase
   if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(bg); else await bg;
   return json({ ok: true });

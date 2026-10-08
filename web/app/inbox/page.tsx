@@ -9,7 +9,7 @@ export default async function InboxPage() {
   const [{ data: conversations }, { data: channels }, { data: pipeline }, { data: team }] = await Promise.all([
     supabase
       .from("conversations")
-      .select("id, assignee_id, last_message_at, contact:contacts(id, name, phone_number)")
+      .select("id, assignee_id, ai_enabled, last_message_at, contact:contacts(id, name, phone_number)")
       .order("last_message_at", { ascending: false }),
     supabase.from("channels").select("id, name"),
     supabase.from("pipelines").select("id").order("created_at").limit(1).maybeSingle(),
@@ -28,6 +28,7 @@ export default async function InboxPage() {
         )}
         <Link href="/team" className="text-sm text-sky-700 underline">Equipo</Link>
         <Link href="/automations" className="text-sm text-sky-700 underline">Automatizaciones</Link>
+        <Link href="/agents" className="text-sm text-sky-700 underline">Agentes IA</Link>
       </nav>
       <Inbox
         initialConversations={(conversations ?? []) as unknown as Conversation[]}

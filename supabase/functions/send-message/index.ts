@@ -58,6 +58,8 @@ Deno.serve(async (req) => {
     sender_id: u.user.id, direction: "out", content: String(content), status,
   });
   if (error) return json({ error: error.message }, 500);
-  await admin.from("conversations").update({ last_message_at: new Date().toISOString() }).eq("id", conv.id);
+  // si una persona escribe, la IA deja de responder en este chat (se puede reactivar desde la bandeja)
+  await admin.from("conversations")
+    .update({ last_message_at: new Date().toISOString(), ai_enabled: false }).eq("id", conv.id);
   return json({ ok: status === "sent", status, detail });
 });

@@ -29,7 +29,7 @@ export function Inbox({
   async function loadConversations() {
     const { data } = await supabase
       .from("conversations")
-      .select("id, assignee_id, last_message_at, contact:contacts(id, name, phone_number)")
+      .select("id, assignee_id, ai_enabled, last_message_at, contact:contacts(id, name, phone_number)")
       .order("last_message_at", { ascending: false });
     if (data) setConversations(data as unknown as Conversation[]);
   }
@@ -37,7 +37,7 @@ export function Inbox({
   async function loadMessages(id: string) {
     const { data } = await supabase
       .from("messages")
-      .select("id, conversation_id, direction, content, status, timestamp")
+      .select("id, conversation_id, direction, content, by_ai, status, timestamp")
       .eq("conversation_id", id)
       .order("timestamp");
     if (data) setMessages(data as Message[]);
@@ -84,6 +84,14 @@ export function Inbox({
     loadConversations();
   }
 
+  async function toggleAi() {
+    if (!current) return;
+    const { error } = await supabase
+      .from("conversations").update({ ai_enabled: !current.ai_enabled }).eq("id", current.id);
+    if (error) setErr(error.message);
+    loadConversations();
+  }
+
   async function send(e: React.FormEvent) {
     e.preventDefault();
     if (!selected || !text.trim()) return;
@@ -122,20 +130,32 @@ export function Inbox({
       </aside>
 
       <section className="flex min-w-0 flex-1 flex-col rounded-xl border bg-white">
-        {current && isAdmin && (
-          <div className="flex items-center gap-2 border-b px-4 py-2 text-sm">
-            <label htmlFor="assignee" className="text-slate-600">Asignado a</label>
-            <select
-              id="assignee"
-              value={current.assignee_id ?? ""}
-              onChange={(e) => reassign(e.target.value)}
-              className="rounded border px-2 py-1"
+        {current && (
+          <div className="flex items-center gap-3 border-b px-4 py-2 text-sm">
+            {isAdmin && (
+              <>
+                <label htmlFor="assignee" className="text-slate-600">Asignado a</label>
+                <select
+                  id="assignee"
+                  value={current.assignee_id ?? ""}
+                  onChange={(e) => reassign(e.target.value)}
+                  className="rounded border px-2 py-1"
+                >
+                  <option value="">Sin asignar</option>
+                  {team.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </>
+            )}
+            <button
+              onClick={toggleAi}
+              className={`ml-auto rounded px-3 py-1 text-xs font-medium ${
+                current.ai_enabled ? "bg-violet-100 text-violet-800" : "bg-slate-100 text-slate-600"
+              }`}
             >
-              <option value="">Sin asignar</option>
-              {team.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
+              🤖 IA {current.ai_enabled ? "activa" : "pausada"}
+            </button>
           </div>
         )}
         <div className="flex-1 space-y-2 overflow-y-auto p-4">
@@ -146,6 +166,7 @@ export function Inbox({
                   m.direction === "out" ? "bg-sky-600 text-white" : "bg-slate-100"
                 }`}
               >
+                {m.by_ai && <span className="mr-1" title="Respuesta de la IA">🤖</span>}
                 {m.content}
                 {m.status === "failed" && <span className="ml-2 text-xs opacity-80">⚠ no enviado</span>}
               </div>
