@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.kb-ingest]
 verify_jwt = true
+
+[functions.groups-import]
+verify_jwt = true

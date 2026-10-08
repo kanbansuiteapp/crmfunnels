@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { ImportDialog, type Device } from "./ImportDialog";
 
 export type WaGroup = {
   id: string; name: string; origin: string; type: "group" | "community" | "channel";
@@ -38,7 +39,7 @@ function Admins({ n }: { n: number }) {
   );
 }
 
-export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; devices: { id: string; name: string }[]; isAdmin: boolean }) {
+export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; devices: Device[]; isAdmin: boolean }) {
   const [q, setQ] = useState("");
   const [type, setType] = useState("");
   const [sort, setSort] = useState<{ key: "name" | "created_at"; dir: 1 | -1 }>({ key: "created_at", dir: -1 });
@@ -196,23 +197,7 @@ export function GroupsTable({ groups, devices, isAdmin }: { groups: WaGroup[]; d
         </table>
       </div>
 
-      {importOpen && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4" onMouseDown={() => setImportOpen(false)}>
-          <div role="dialog" aria-modal="true" aria-label="Importar grupos" onMouseDown={(e) => e.stopPropagation()} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <h2 className="mb-1 text-lg font-semibold">Importar grupos</h2>
-            <p className="mb-4 text-sm text-slate-500">Elige el dispositivo del que quieres traer sus grupos, comunidades y canales.</p>
-            <select aria-label="Dispositivo" className="mb-4 w-full rounded-lg border px-4 py-3 text-sm">
-              <option value="">Seleccionar dispositivo</option>
-              {devices.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-            </select>
-            <p className="mb-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">La conexión con WhatsApp para traer los grupos aún no está activada.</p>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setImportOpen(false)} className="rounded-lg border px-4 py-2 text-sm">Cerrar</button>
-              <button disabled className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white opacity-50">Importar</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {importOpen && <ImportDialog devices={devices} onClose={() => setImportOpen(false)} />}
     </div>
   );
 }
