@@ -6,7 +6,7 @@ export default async function NewBroadcastPage() {
   const supabase = createClient();
   const { data: auth } = await supabase.auth.getUser();
   const [{ data: me }, { data: channels }, { data: tags }] = await Promise.all([
-    supabase.from("profiles").select("role").eq("id", auth.user?.id ?? "").maybeSingle(),
+    supabase.from("profiles").select("role, organization_id").eq("id", auth.user?.id ?? "").maybeSingle(),
     supabase.from("channels").select("id, name, phone_number, status").order("created_at"),
     supabase.from("tags").select("id, name").order("name"),
   ]);
@@ -17,6 +17,7 @@ export default async function NewBroadcastPage() {
       <BroadcastWizard
         devices={(channels ?? []).map((c) => ({ id: c.id, name: c.name, phone: c.phone_number ?? "", status: c.status }))}
         tags={tags ?? []}
+        orgId={me.organization_id ?? ""}
       />
     </main>
   );

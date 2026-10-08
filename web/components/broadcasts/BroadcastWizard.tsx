@@ -33,7 +33,7 @@ const STEPS = [
 // valor para <input type="datetime-local"> en hora local
 const localInput = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 
-export function BroadcastWizard({ devices, tags }: { devices: Device[]; tags: { id: string; name: string }[] }) {
+export function BroadcastWizard({ devices, tags, orgId }: { devices: Device[]; tags: { id: string; name: string }[]; orgId: string }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [step, setStep] = useState(0);
@@ -47,6 +47,12 @@ export function BroadcastWizard({ devices, tags }: { devices: Device[]; tags: { 
   const [busy, setBusy] = useState(false);
 
   const [open, setOpen] = useState(false);
+  const [media, setMedia] = useState<{ path: string; name: string; mime: string; preview: string } | null>(null);
+  const [upBusy, setUpBusy] = useState(false);
+  const [emojis, setEmojis] = useState(false);
+  const ta = useRef<HTMLTextAreaElement>(null);
+  const imgIn = useRef<HTMLInputElement>(null);
+  const vidIn = useRef<HTMLInputElement>(null);
   const box = useRef<HTMLDivElement>(null);
   const device = devices.find((d) => d.id === f.channel);
 
@@ -65,8 +71,50 @@ export function BroadcastWizard({ devices, tags }: { devices: Device[]; tags: { 
     return () => { live = false; };
   }, [aud, supabase]);
 
+  async function pickMedia(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (file.size > 16 * 1024 * 1024) return setErr("El archivo supera 16 MB.");
+    setUpBusy(true);
+    setErr(null);
+    const mime = (file.type || "application/octet-stream").split(";")[0];
+    const path = `${orgId}/broadcasts/${crypto.randomUUID()}-${file.name.replace(/[^\w.-]+/g, "_").slice(-80)}`;
+    const { error } = await supabase.storage.from("chat-media").upload(path, file, { contentType: mime });
+    setUpBusy(false);
+    if (error) return setErr(`No se pudo subir: ${error.message}`);
+    if (media) supabase.storage.from("chat-media").remove([media.path]);
+    setMedia({ path, name: file.name, mime, preview: URL.createObjectURL(file) });
+  }
+
+  function removeMedia() {
+    if (media) supabase.storage.from("chat-media").remove([media.path]); // no dejar archivos huérfanos
+    setMedia(null);
+  }
+
+  // envuelve la selección con marcas de WhatsApp (*negrita*, _cursiva_, ~tachado~) o inserta texto en el cursor
+  function wrap(mark: string) {
+    const el = ta.current;
+    if (!el) return;
+    const [a, b] = [el.selectionStart, el.selectionEnd];
+    const sel = f.message.slice(a, b);
+    const next = f.message.slice(0, a) + mark + sel + mark + f.message.slice(b);
+    if (next.length > 4000) return;
+    setF({ ...f, message: next });
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(a + mark.length, b + mark.length); });
+  }
+  function insert(text: string) {
+    const el = ta.current;
+    const a = el?.selectionStart ?? f.message.length;
+    const b = el?.selectionEnd ?? a;
+    const next = f.message.slice(0, a) + text + f.message.slice(b);
+    if (next.length > 4000) return;
+    setF({ ...f, message: next });
+    requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(a + text.length, a + text.length); });
+  }
+
   const valid = [
-    f.name.trim() && f.channel && f.message.trim(),
+    f.name.trim() && f.channel && (f.message.trim() || media),
     count !== 0,
     f.when === "now" || (f.at && new Date(f.at).getTime() > Date.now()),
   ];
@@ -77,6 +125,7 @@ export function BroadcastWizard({ devices, tags }: { devices: Device[]; tags: { 
     const { error } = await supabase.rpc("create_broadcast_audience", {
       p_name: f.name, p_channel: f.channel, p_message: f.message, p_tags: aud.tags, p_mode: aud.mode, p_codes: aud.countries,
       p_per_minute: f.perMinute, p_scheduled_at: f.when === "later" ? new Date(f.at).toISOString() : null,
+      p_media_path: media?.path ?? null, p_media_name: media?.name ?? null, p_media_mime: media?.mime ?? null,
     });
     setBusy(false);
     if (error) return setErr(error.message);
@@ -215,8 +264,14 @@ export function BroadcastWizard({ devices, tags }: { devices: Device[]; tags: { 
               <div className="relative" ref={box}>
                 <button type="button" aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((v) => !v)}
                   className={`${input} flex items-center justify-between text-left ${device ? "" : "text-slate-400"}`}>
-                  <span>{device ? label4(device) : "Seleccionar dispositivo"}</span>
-                  <span aria-hidden className="text-slate-400">⌄</span>
+                  <span className="flex items-center gap-3">
+                    {device && <span className={`h-3 w-3 rounded-full ${isOn(device) ? "bg-green-500" : "bg-slate-400"}`} />}
+                    {device ? label4(device) : "Seleccionar dispositivo"}
+                  </span>
+                  <span className="flex items-center gap-3 text-slate-400">
+                    {device && <span role="button" aria-label="Quitar dispositivo" onClick={(e) => { e.stopPropagation(); setF({ ...f, channel: "" }); }}>✕</span>}
+                    <span aria-hidden>⌄</span>
+                  </span>
                 </button>
                 {open && (
                   <ul role="listbox" aria-label="Dispositivos" className="absolute z-20 mt-1 w-full rounded-lg border bg-white py-2 shadow-lg">
@@ -234,11 +289,59 @@ export function BroadcastWizard({ devices, tags }: { devices: Device[]; tags: { 
                 )}
               </div>
               {device && !isOn(device) && <p className="text-sm text-amber-700">Este dispositivo está desconectado: los mensajes fallarán hasta que lo reconectes.</p>}
-              <div>
-                <label htmlFor="msg" className={label}>Mensaje</label>
-                <textarea id="msg" rows={7} maxLength={1000} value={f.message} onChange={(e) => setF({ ...f, message: e.target.value })}
-                  placeholder="Escribe tu mensaje. Usa {{name}} para el nombre del contacto." className={input} />
-                <p className="mt-1 text-right text-xs text-slate-400">{f.message.length}/1000</p>
+              <div className="flex items-center gap-8 text-sm">
+                <label className="flex cursor-not-allowed items-center gap-2 text-slate-400" title="Aún no hay plantillas guardadas">
+                  <input type="radio" name="kind" disabled /> Plantilla
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="radio" name="kind" checked readOnly className="accent-indigo-600" /> Crear un mensaje
+                </label>
+              </div>
+              <p className="border-t pt-4 text-center text-sm text-slate-500">Crea un nuevo mensaje</p>
+              <p className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-900">
+                Evita enviar difusiones masivas a contactos que podrían considerar el mensaje como spam, para evitar que WhatsApp bloquee tu número.
+              </p>
+
+              <input ref={imgIn} type="file" accept="image/*" hidden onChange={pickMedia} />
+              <input ref={vidIn} type="file" accept="video/*" hidden onChange={pickMedia} />
+              {media ? (
+                <div className="mx-auto flex w-full max-w-sm items-center justify-between gap-3 rounded-xl border-2 border-dotted border-indigo-300 px-4 py-3 text-sm">
+                  <span className="truncate" title={media.name}>{media.mime.startsWith("video") ? "🎞️" : "🖼️"} {media.name}</span>
+                  <button type="button" onClick={removeMedia} className="shrink-0 text-indigo-600 hover:underline">Quitar</button>
+                </div>
+              ) : (
+                <div className="mx-auto grid w-full max-w-sm grid-cols-2 overflow-hidden rounded-2xl border-2 border-dotted border-indigo-400 text-sm font-medium text-indigo-600">
+                  <button type="button" disabled={upBusy} onClick={() => imgIn.current?.click()} className="border-r-2 border-dotted border-indigo-400 py-5 hover:bg-indigo-50 disabled:opacity-50">
+                    <span className="block text-2xl" aria-hidden>🖼️</span>{upBusy ? "Subiendo…" : "Imagen"}
+                  </button>
+                  <button type="button" disabled={upBusy} onClick={() => vidIn.current?.click()} className="py-5 hover:bg-indigo-50 disabled:opacity-50">
+                    <span className="block text-2xl" aria-hidden>🎞️</span>Video
+                  </button>
+                </div>
+              )}
+
+              <div className="rounded-xl bg-slate-100 p-4">
+                <textarea ref={ta} aria-label="Mensaje" rows={6} maxLength={4000} value={f.message}
+                  onChange={(e) => setF({ ...f, message: e.target.value })}
+                  placeholder="Escribe tu mensaje. Usa {{name}} para el nombre del contacto."
+                  className="w-full resize-none bg-transparent text-sm outline-none" />
+                <div className="relative mt-2 flex items-center justify-between text-slate-500">
+                  <div className="flex items-center gap-4">
+                    <button type="button" aria-label="Emoji" onClick={() => setEmojis((v) => !v)}>☺</button>
+                    <button type="button" aria-label="Negrita" onClick={() => wrap("*")} className="font-bold">B</button>
+                    <button type="button" aria-label="Cursiva" onClick={() => wrap("_")} className="italic">I</button>
+                    <button type="button" aria-label="Tachado" onClick={() => wrap("~")} className="line-through">S</button>
+                    <button type="button" aria-label="Insertar nombre del contacto" title="Insertar {{name}}" onClick={() => insert("{{name}}")}>{"{}"}</button>
+                  </div>
+                  <span className="rounded-full bg-white px-3 py-1 text-xs">{f.message.length} / 4000</span>
+                  {emojis && (
+                    <div className="absolute bottom-full left-0 mb-2 grid w-64 grid-cols-8 gap-1 rounded-xl border bg-white p-2 text-lg shadow-lg">
+                      {["😀", "😊", "😉", "😍", "🙏", "👍", "👋", "🎉", "🔥", "✅", "⭐", "💬", "📞", "🎁", "💡", "❤️", "😂", "🤝", "🚀", "📣", "⏰", "💰", "📦", "✨"].map((em) => (
+                        <button key={em} type="button" onClick={() => { insert(em); setEmojis(false); }}>{em}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </>
           )}
@@ -302,7 +405,7 @@ export function BroadcastWizard({ devices, tags }: { devices: Device[]; tags: { 
 
         {step !== 1 && (
           <div className="rounded-2xl bg-slate-50 p-8">
-            <PhonePreview device={device && device.phone ? device : undefined} message={f.message} />
+            <PhonePreview device={device && device.phone ? device : undefined} message={f.message} media={media ? { url: media.preview, video: media.mime.startsWith("video") } : undefined} />
           </div>
         )}
       </div>

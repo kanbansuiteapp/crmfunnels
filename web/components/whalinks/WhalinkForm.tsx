@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 export type DeviceOption = { id: string; name: string; phone: string };
 export type WhalinkValues = { id: string; name: string; message: string; tag_name: string | null; channel_id: string };
 
-export function PhonePreview({ device, message }: { device?: DeviceOption; message: string }) {
+export function PhonePreview({ device, message, media }: { device?: DeviceOption; message: string; media?: { url: string; video: boolean } }) {
   return (
     <div className="mx-auto w-[300px] rounded-[36px] border-[6px] border-white bg-white shadow-xl" aria-label="Vista previa en WhatsApp" role="img">
       <div className="overflow-hidden rounded-[30px]">
@@ -24,8 +24,12 @@ export function PhonePreview({ device, message }: { device?: DeviceOption; messa
         </div>
         <div className="flex h-[320px] flex-col justify-end gap-2 bg-[#efeae2] p-3"
           style={{ backgroundImage: "radial-gradient(#d9d3c7 1px, transparent 1px)", backgroundSize: "14px 14px" }}>
-          {message.trim() ? (
+          {message.trim() || media ? (
             <div className="ml-auto max-w-[85%] rounded-lg rounded-tr-none bg-[#d9fdd3] px-3 py-2 text-[13px] text-slate-800 shadow-sm">
+              {media && (media.video
+                ? <video src={media.url} className="mb-1 max-h-40 w-full rounded" muted />
+                // eslint-disable-next-line @next/next/no-img-element
+                : <img src={media.url} alt="" className="mb-1 max-h-40 w-full rounded object-cover" />)}
               <p className="whitespace-pre-wrap break-words">{message}</p>
               <p className="mt-1 text-[11px] text-slate-400">(ref:······)</p>
               <p className="text-right text-[10px] text-slate-400">1:47 PM ✓</p>

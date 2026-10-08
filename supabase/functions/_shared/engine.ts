@@ -301,13 +301,25 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // para no disparar los filtros anti-spam de WhatsApp. Se llama una vez por minuto.
 export async function runBroadcasts(db: Db): Promise<void> {
   const { data: bcs } = await db.from("broadcasts")
-    .select("id, organization_id, channel_id, message, per_minute").eq("status", "sending")
+    .select("id, organization_id, channel_id, message, per_minute, media_path, media_name, media_mime").eq("status", "sending")
     .or(`scheduled_at.is.null,scheduled_at.lte.${new Date().toISOString()}`);
 
   for (const b of bcs ?? []) {
     const { data: recipients } = await db.rpc("claim_broadcast_recipients", { p_broadcast: b.id, p_limit: b.per_minute });
     const { data: channel } = await db.from("channels").select("api_url, api_key, instance_name").eq("id", b.channel_id).single();
     const gap = 60_000 / b.per_minute;
+
+    // adjunto del envío: se descarga una sola vez por ronda
+    let file: { bytes: Uint8Array; mime: string; type: ReturnType<typeof mediaTypeOf>; name: string } | null = null;
+    if (b.media_path && (recipients ?? []).length > 0) {
+      const dl = await db.storage.from("chat-media").download(String(b.media_path));
+      if (dl.error || !dl.data || !String(b.media_path).startsWith(`${b.organization_id}/broadcasts/`) || dl.data.size > 16 * 1024 * 1024) {
+        for (const r of recipients ?? []) await db.rpc("broadcast_mark", { p_recipient: r.id, p_status: "failed", p_error: "archivo adjunto no disponible" });
+        continue;
+      }
+      const mime = (dl.data.type || String(b.media_mime ?? "application/octet-stream")).split(";")[0];
+      file = { bytes: new Uint8Array(await dl.data.arrayBuffer()), mime, type: mediaTypeOf(mime), name: String(b.media_name ?? "archivo").slice(0, 120) };
+    }
 
     for (const [i, r] of (recipients ?? []).entries()) {
       if (i > 0) await sleep(Math.round(gap * (0.7 + Math.random() * 0.6)));
@@ -325,7 +337,8 @@ export async function runBroadcasts(db: Db): Promise<void> {
           continue;
         }
         const text = render(b.message, contact).trim();
-        await sendText(channel!, contact.phone_number, text);
+        if (file) await sendMedia(channel!, contact.phone_number, { type: file.type, mime: file.mime, name: file.name, base64: toBase64(file.bytes), caption: text });
+        else await sendText(channel!, contact.phone_number, text);
 
         let { data: conv } = await db.from("conversations").select("id")
           .eq("channel_id", b.channel_id).eq("contact_id", contact.id).maybeSingle();
@@ -336,9 +349,15 @@ export async function runBroadcasts(db: Db): Promise<void> {
           conv = created;
         }
         if (conv) {
+          let media = {};
+          if (file) {
+            const copy = `${contact.organization_id}/${conv.id}/${crypto.randomUUID()}-${file.name.replace(/[^\w.-]+/g, "_")}`;
+            const up = await db.storage.from("chat-media").upload(copy, file.bytes, { contentType: file.mime });
+            if (!up.error) media = { media_url: copy, media_type: file.type, media_mime: file.mime, media_name: file.name };
+          }
           await db.from("messages").insert({
             organization_id: contact.organization_id, conversation_id: conv.id, contact_id: contact.id,
-            direction: "out", content: text, status: "sent",
+            direction: "out", content: text || null, status: "sent", ...media,
           });
         }
         await db.rpc("broadcast_mark", { p_recipient: r.id, p_status: "sent" });
