@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { AgentWizard } from "./AgentWizard";
 import { MODELS, OBJECTIVES, type Agent, type ChannelRow, type Source } from "./types";
 
 const blank = (): Agent => ({
@@ -26,6 +27,7 @@ export function AgentsClient({
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [kb, setKb] = useState({ kind: "text", title: "", content: "", url: "", q: "", a: "" });
   const [busy, setBusy] = useState(false);
+  const [wizard, setWizard] = useState(false);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | "on" | "off">("all");
   const [sort, setSort] = useState<{ key: "name" | "active"; dir: 1 | -1 }>({ key: "name", dir: 1 });
@@ -205,6 +207,10 @@ export function AgentsClient({
 
   return (
     <div>
+      {wizard && (
+        <AgentWizard onClose={() => setWizard(false)}
+          onCreated={(a) => { setWizard(false); setDraft(a); setApiKey(""); setMsg({ ok: true, text: "Agente creado. Agrega su base de conocimiento para que responda mejor." }); router.refresh(); }} />
+      )}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="flex items-center gap-3 text-2xl font-semibold">
@@ -213,7 +219,7 @@ export function AgentsClient({
           <p className="text-sm text-slate-500">Gestiona tus agentes{!isAdmin && " · solo los administradores pueden editarlos"}</p>
         </div>
         {isAdmin && (
-          <button onClick={() => { setDraft(blank()); setApiKey(""); setMsg(null); }}
+          <button onClick={() => setWizard(true)}
             className="shrink-0 rounded-full bg-slate-900 px-5 py-3 text-sm font-medium text-white hover:bg-slate-700">+ Crear Agente</button>
         )}
       </div>

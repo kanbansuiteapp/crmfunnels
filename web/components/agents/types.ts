@@ -16,4 +16,4 @@ export type Source = { id: string; agent_id: string; kind: string; title: string
 
 export const MODELS = ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1"];
 
-export const OBJECTIVES = ["Captación de Leads", "Preguntas Frecuentes", "Ventas", "Agendar Citas", "Soporte"];
+export const OBJECTIVES = ["Preguntas Frecuentes", "Cotizaciones", "Agendar Citas", "Ventas", "Soporte al Cliente", "Captación de Leads"];
