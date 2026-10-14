@@ -106,7 +106,7 @@ function ConnectFlow({ channel, onClose, onConnected }: { channel: Channel; onCl
     <Modal title="Conectar número" description="Selecciona la opción que mejor se adapte a tus necesidades." onClose={onClose} wide>
       <div className="flex justify-center gap-5">
         {choice("messenger", "WhatsApp Messenger", "Con QR · grupos, comunidades y canales", "✆", "bg-green-500")}
-        {choice("business", "WhatsApp Business", "Con QR · solo grupos", "B", "bg-green-500")}
+        {choice("business", "WhatsApp Business", "Con QR · grupos, comunidades y canales", "B", "bg-green-500")}
         {choice("api", "WhatsApp Business API", "Con Meta", "∞", "bg-blue-500")}
       </div>
       <ModalActions onCancel={onClose} onOk={() => setStep(kind === "api" ? "meta" : "qr")} okLabel="Continuar" disabled={!kind} />
