@@ -52,6 +52,37 @@ Deno.serve(async (req) => {
     return json({ ok: true });
   }
 
+  // ── WhatsApp Business API (Meta): canjea el código del registro insertado, registra el número y suscribe el webhook
+  if (action === "meta_connect") {
+    const appId = Deno.env.get("META_APP_ID") ?? "", secret = Deno.env.get("META_APP_SECRET") ?? "";
+    if (!appId || !secret) return json({ error: "Falta configurar META_APP_ID y META_APP_SECRET en los secretos de Supabase." }, 503);
+    const wabaId = String(body.waba_id ?? ""), phoneId = String(body.phone_number_id ?? ""), code = String(body.code ?? "");
+    if (!wabaId || !phoneId || !code) return json({ error: "Faltan datos del registro de Meta" }, 400);
+    const G = "https://graph.facebook.com/v25.0";
+    const gj = async (path: string, init?: RequestInit) => { const r = await fetch(`${G}${path}`, { ...init, signal: AbortSignal.timeout(30_000) }); return { ok: r.ok, data: await r.json().catch(() => ({})) as any }; };
+    try {
+      const tok = await gj(`/oauth/access_token?client_id=${appId}&client_secret=${secret}&code=${encodeURIComponent(code)}`);
+      if (!tok.ok || !tok.data.access_token) return json({ error: `Meta rechazó el código: ${tok.data?.error?.message ?? "sin detalle"}` }, 502);
+      const token = tok.data.access_token as string;
+      const auth = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+      const sub = await gj(`/${wabaId}/subscribed_apps`, { method: "POST", headers: auth });
+      if (!sub.ok) return json({ error: `No se pudo suscribir el webhook: ${sub.data?.error?.message ?? "sin detalle"}` }, 502);
+      const pin = Deno.env.get("META_REGISTER_PIN");
+      if (pin) await gj(`/${phoneId}/register`, { method: "POST", headers: auth, body: JSON.stringify({ messaging_product: "whatsapp", pin }) }); // si ya estaba registrado no es un error fatal
+      const info = await gj(`/${phoneId}?fields=display_phone_number,verified_name`, { headers: auth });
+      const phone = info.data?.display_phone_number ? `+${String(info.data.display_phone_number).replace(/\D/g, "")}` : null;
+      const { error } = await admin.from("channels").update({
+        provider: "meta", wa_type: "business", status: "connected", needs_reconnect: false, disconnected_at: null, phone_number: phone,
+        meta_waba_id: wabaId, meta_phone_number_id: phoneId, meta_access_token: token,
+        meta_token_expires_at: new Date(Date.now() + (Number(tok.data.expires_in) || 60 * 86400) * 1000).toISOString(),
+      }).eq("id", ch.id);
+      if (error) return json({ error: error.message.includes("channels_meta_phone_uq") ? "Ese número ya está conectado en otro dispositivo." : error.message }, 409);
+      return json({ ok: true, phone });
+    } catch (e) {
+      return json({ error: e instanceof Error ? e.message : String(e) }, 502);
+    }
+  }
+
   const evoUrl = (Deno.env.get("EVOLUTION_API_URL") ?? "").replace(/\/$/, "");
   const evoKey = Deno.env.get("EVOLUTION_API_KEY") ?? "";
   const evo = async (method: string, path: string, key: string, payload?: unknown) => {

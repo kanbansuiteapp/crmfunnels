@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Icon } from "@/components/ui/Icon";
+import { embeddedSignup } from "@/lib/meta";
 import { fmtBytes, fmtMB } from "@/lib/format";
 import { Alert, btnOutline, btnPrimary, Field, inputCls, Modal, ModalActions, Notice, useMe } from "@/components/settings/kit";
 
@@ -78,6 +79,20 @@ function ConnectFlow({ channel, onClose, onConnected }: { channel: Channel; onCl
     return () => { clearInterval(poll); clearInterval(refresh); };
   }, [step, channel.id, getQr, onConnected]);
 
+  const connectMeta = async () => {
+    setLoading(true); setErr(null);
+    try {
+      const su = await embeddedSignup();
+      const r = await call({ action: "meta_connect", channel_id: channel.id, ...su });
+      if (!alive.current) return;
+      if (r.error) setErr(r.error); else onConnected();
+    } catch (e) {
+      if (alive.current) setErr(e instanceof Error ? e.message : "No se pudo conectar con Meta.");
+    } finally {
+      if (alive.current) setLoading(false);
+    }
+  };
+
   const choice = (k: "messenger" | "business" | "api", title: string, hint: string, g: string, color: string) => (
     <button onClick={() => setKind(k)} aria-pressed={kind === k}
       className={`flex w-36 flex-col items-center gap-2 rounded-xl border p-4 text-center text-sm font-semibold text-slate-700 ${kind === k ? "border-green-400 bg-green-50" : "border-slate-100 hover:border-slate-300"}`}>
@@ -107,10 +122,10 @@ function ConnectFlow({ channel, onClose, onConnected }: { channel: Channel; onCl
         <li>La aplicación de WhatsApp en el celular y la versión web dejarán de funcionar con este número después de la conexión.</li>
       </ul>
       <p className="mt-4 text-sm text-indigo-600">El asistente de Facebook se abrirá en una nueva pestaña; sigue los pasos para conectar tu número de WhatsApp API.</p>
-      <Notice text="La conexión con Meta aún no está configurada en esta cuenta. Por ahora conecta tu número con WhatsApp Messenger (QR)." />
+      <Alert text={err} />
       <div className="mt-8 grid grid-cols-2 gap-4">
         <button onClick={onClose} className={btnOutline}>Cancelar</button>
-        <button disabled className={btnPrimary}>Continuar en Facebook</button>
+        <button disabled={loading} onClick={connectMeta} className={btnPrimary}>{loading ? "Conectando..." : "Continuar en Facebook"}</button>
       </div>
     </Modal>
   );
